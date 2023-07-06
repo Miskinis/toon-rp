@@ -97,37 +97,13 @@
 			
 			HLSLPROGRAM
 
-			//#pragma enable_d3d11_debug_symbols
+			#include_with_pragmas "PragmaIncludes/ToonRPDefaultMultiCompileList.hlsl"
+			#include_with_pragmas "PragmaIncludes/ToonRPDefaultShaderFeatureList.hlsl"
+			#pragma shader_feature_local _NORMAL_MAP
 
-			#pragma multi_compile_fog
-			#pragma multi_compile_instancing
-
-			// Global Ramp
-			#pragma multi_compile_fragment _ _TOON_RP_GLOBAL_RAMP_CRISP _TOON_RP_GLOBAL_RAMP_TEXTURE 
-
-			// Shadows
-			#pragma multi_compile _ _TOON_RP_DIRECTIONAL_SHADOWS _TOON_RP_DIRECTIONAL_CASCADED_SHADOWS _TOON_RP_BLOB_SHADOWS
-			#pragma multi_compile_fragment _ _TOON_RP_PCF _TOON_RP_VSM
-			#pragma multi_compile_fragment _ _TOON_RP_SHADOWS_RAMP_CRISP
-			#pragma multi_compile_fragment _ _TOON_RP_SHADOWS_PATTERN
-
-			// Lights
-			#pragma multi_compile _ _TOON_RP_ADDITIONAL_LIGHTS _TOON_RP_ADDITIONAL_LIGHTS_VERTEX
-
-			// SSAO
-			#pragma multi_compile_fragment _ _TOON_RP_SSAO _TOON_RP_SSAO_PATTERN
-
-			// Per-Material
-			#pragma shader_feature_local _ALPHATEST_ON
-			#pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
-			#pragma shader_feature_local _NORMAL_MAP 
-			#pragma shader_feature_local_fragment _OVERRIDE_RAMP 
-			#pragma shader_feature_local_fragment _RECEIVE_BLOB_SHADOWS
-			#pragma shader_feature_local _ _MATCAP_ADDITIVE _MATCAP_MULTIPLICATIVE
-
-			// Bug workaround: stencil might not be set if don't create a separate shader variant for outlines
-			#pragma shader_feature_local_vertex _HAS_OUTLINES_STENCIL_LAYER
-
+			#define SPECULAR
+			#define RIM
+			#define EMISSION
 			#include "ToonRPDefaultForwardPass.hlsl"
 			
 			ENDHLSL
@@ -142,15 +118,8 @@
 			
 			HLSLPROGRAM
 
-			//#pragma enable_d3d11_debug_symbols
-
-			#pragma multi_compile_instancing
-
-			// Shadows
-			#pragma multi_compile _ _TOON_RP_VSM
-
-			// Per-Material
-			#pragma shader_feature_local _ALPHATEST_ON
+			#include_with_pragmas "PragmaIncludes/ToonRPDefaultShadowMultiCompileList.hlsl"
+			#include_with_pragmas "PragmaIncludes/ToonRPDefaultBaseShaderFeatureList.hlsl"
 
 			#include "ToonRPDefaultInput.hlsl"
 			#include "ToonRPDefaultShadowCasterPass.hlsl"
@@ -167,12 +136,8 @@
 			
 			HLSLPROGRAM
 
-			//#pragma enable_d3d11_debug_symbols
-
-			#pragma multi_compile_instancing
-
-			// Per-Material
-			#pragma shader_feature_local _ALPHATEST_ON
+			#include_with_pragmas "PragmaIncludes/ToonRPDefaultBaseMultiCompileList.hlsl"
+			#include_with_pragmas "PragmaIncludes/ToonRPDefaultBaseShaderFeatureList.hlsl"
 
 			#include "ToonRPDefaultInput.hlsl"
 			#include "ToonRPDefaultDepthOnlyPass.hlsl"
@@ -189,12 +154,8 @@
 			
 			HLSLPROGRAM
 
-			//#pragma enable_d3d11_debug_symbols
-
-			#pragma multi_compile_instancing
-
-			// Per-Material
-			#pragma shader_feature_local _ALPHATEST_ON
+			#include_with_pragmas "PragmaIncludes/ToonRPDefaultBaseMultiCompileList.hlsl"
+			#include_with_pragmas "PragmaIncludes/ToonRPDefaultBaseShaderFeatureList.hlsl"
 			#pragma shader_feature_local _NORMAL_MAP
 
 			#include "ToonRPDefaultInput.hlsl"
