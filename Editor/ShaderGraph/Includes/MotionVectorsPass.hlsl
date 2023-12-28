@@ -7,9 +7,9 @@ PackedVaryings VS(Attributes input)
 {
     // ReSharper disable once CppRedundantCastExpression
     Varyings output = (Varyings) 0;
-    output = BuildVaryings(input);
+    float3 positionWs, normalWs;
+    output = BuildVaryings(input, positionWs, normalWs);
 
-    const float3 positionWs = TransformObjectToWorld(input.positionOS);
     output.positionCsNoJitter = mul(_NonJitteredViewProjMatrix, float4(positionWs, 1));
 
     const float3 previousPosition = UseLastFramePositions() ? input.positionOld : input.positionOS;
