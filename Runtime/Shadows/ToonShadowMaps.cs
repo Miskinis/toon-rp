@@ -14,6 +14,12 @@ namespace DELTation.ToonRP.Shadows
 
         private const int MaxShadowedDirectionalLightsCount = 1;
         private const int MaxShadowedAdditionalLightsCount = 16;
+        // Must mirror MAX_POINT_SHADOW_FACES in Shadows.hlsl.
+        private const int MaxPointShadowFaces = 6;
+
+        // A point light occupies one tile per cubemap face.
+        private const int MaxAdditionalShadowTiles = MaxShadowedAdditionalLightsCount * MaxPointShadowFaces;
+
         public const int MaxCascades = 4;
 
         // Should mirror the value in VSM.hlsl
@@ -82,7 +88,7 @@ namespace DELTation.ToonRP.Shadows
             new(0.14383161f, -0.14100790f),
         };
 
-        private readonly Matrix4x4[] _additionalShadowMatricesVp = new Matrix4x4[MaxShadowedAdditionalLightsCount];
+        private readonly Matrix4x4[] _additionalShadowMatricesVp = new Matrix4x4[MaxAdditionalShadowTiles];
         private readonly Vector4[] _additionalShadowMetadata = new Vector4[MaxShadowedAdditionalLightsCount];
         private readonly ToonPipelineMaterial _blurMaterial;
         private readonly Shader _blurShader;
@@ -240,6 +246,7 @@ namespace DELTation.ToonRP.Shadows
             cmd.ReleaseTemporaryRT(DirectionalShadowsAtlasId);
             cmd.ReleaseTemporaryRT(DirectionalShadowsAtlasDepthId);
             cmd.ReleaseTemporaryRT(DirectionalShadowsAtlasTempId);
+            cmd.ReleaseTemporaryRT(AdditionalShadowsDepthId);
             _context.ExecuteCommandBufferAndClear(cmd);
             CommandBufferPool.Release(cmd);
         }
@@ -470,95 +477,187 @@ namespace DELTation.ToonRP.Shadows
 
         private void RenderAdditionalShadows(CommandBuffer cmd, int depthBits, in ToonLightsData lightsData)
         {
-            int shadowLightsCount = 0;
+            bool additionalShadowsEnabled = _settings.ShadowMaps.Additional.Enabled &&
+                _cameraRendererSettings.AdditionalLights == ToonCameraRendererSettings.AdditionalLightsMode.PerPixel;
 
-            if (_settings.ShadowMaps.Additional.Enabled && _cameraRendererSettings.AdditionalLights == ToonCameraRendererSettings.AdditionalLightsMode.PerPixel)
+            var defaultMetadata = new Vector4(-1, 0, 0, 0);
+            for (int i = 0; i < _additionalShadowMetadata.Length; i++)
             {
-                // Mark shadowed lights
-                for (int additionalLightIndex = 0; additionalLightIndex < lightsData.AdditionalLights.Count; additionalLightIndex++)
+                _additionalShadowMetadata[i] = defaultMetadata;
+            }
+
+            if (!additionalShadowsEnabled)
+            {
+                cmd.DisableKeyword(ToonShadows.AdditionalShadowsGlobalKeyword);
+                return;
+            }
+
+            int shadowedSpotLightsCount = 0;
+            int shadowedPointLightsCount = 0;
+
+            // Mark shadowed lights
+            for (int additionalLightIndex = 0; additionalLightIndex < lightsData.AdditionalLights.Count; additionalLightIndex++)
+            {
+                if (additionalLightIndex >= _additionalShadowMetadata.Length)
                 {
-                    ToonLightsData.AdditionalLight additionalLight = lightsData.AdditionalLights[additionalLightIndex];
-                    VisibleLight visibleLight = _cullingResults.visibleLights[additionalLight.VisibleLightIndex];
-                    if (visibleLight.light.shadows == LightShadows.None)
-                    {
-                        continue;
-                    }
-
-                    if (additionalLightIndex >= _additionalShadowMetadata.Length)
-                    {
-                        continue;
-                    }
-                    
-                    if (!_cullingResults.GetShadowCasterBounds(additionalLight.VisibleLightIndex, out Bounds _))
-                    {
-                        continue;
-                    }
-
-                    // TODO: add point light later
-                    if (visibleLight.lightType is LightType.Spot)
-                    {
-                        additionalLight.ShadowLightIndex = shadowLightsCount;
-                        lightsData.AdditionalLights[additionalLightIndex] = additionalLight;
-
-                        ++shadowLightsCount;
-                    }
+                    continue;
                 }
 
-                var defaultMetadata = new Vector4(-1, 0, 0, 0);
-
-                for (int i = 0; i < _additionalShadowMetadata.Length; i++)
+                ToonLightsData.AdditionalLight additionalLight = lightsData.AdditionalLights[additionalLightIndex];
+                VisibleLight visibleLight = _cullingResults.visibleLights[additionalLight.VisibleLightIndex];
+                if (visibleLight.light.shadows == LightShadows.None)
                 {
-                    _additionalShadowMetadata[i] = defaultMetadata;
+                    continue;
+                }
+
+                if (!_cullingResults.GetShadowCasterBounds(additionalLight.VisibleLightIndex, out Bounds _))
+                {
+                    continue;
+                }
+
+                switch (visibleLight.lightType)
+                {
+                    case LightType.Spot:
+                        ++shadowedSpotLightsCount;
+                        break;
+                    case LightType.Point:
+                        if (_settings.ShadowMaps.Additional.Point.Enabled)
+                        {
+                            ++shadowedPointLightsCount;
+                        }
+
+                        break;
                 }
             }
 
-            if (shadowLightsCount > 0)
+            int totalTilesCount = shadowedSpotLightsCount + shadowedPointLightsCount * MaxPointShadowFaces;
+            if (totalTilesCount <= 0)
             {
-                int resolution = (int) _settings.ShadowMaps.Additional.AtlasSize;
-                int split = Mathf.CeilToInt(Mathf.Sqrt(shadowLightsCount));
-                int tileSize = resolution / split;
-                resolution = tileSize * split;
-                
-                cmd.SetGlobalFloat(ZClipId, 1);
-                cmd.GetTemporaryRT(AdditionalShadowsDepthId, resolution, resolution, depthBits, ShadowmapFiltering, DepthRenderTextureFormat);
-                cmd.SetRenderTarget(AdditionalShadowsDepthId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
-                cmd.ClearRenderTarget(true, false, Color.clear);
+                cmd.DisableKeyword(ToonShadows.AdditionalShadowsGlobalKeyword);
+                return;
+            }
 
-                for (int additionalLightIndex = 0; additionalLightIndex < lightsData.AdditionalLights.Count; additionalLightIndex++)
+            int resolution = (int)_settings.ShadowMaps.Additional.AtlasSize;
+            int split = Mathf.CeilToInt(Mathf.Sqrt(totalTilesCount));
+            int tileSize = resolution / split;
+            resolution = tileSize * split;
+
+            cmd.SetGlobalFloat(ZClipId, 1);
+            cmd.GetTemporaryRT(AdditionalShadowsDepthId, resolution, resolution, depthBits, ShadowmapFiltering, DepthRenderTextureFormat);
+            cmd.SetRenderTarget(AdditionalShadowsDepthId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
+            cmd.ClearRenderTarget(true, false, Color.clear);
+
+            int tileIndex = 0;
+
+            for (int additionalLightIndex = 0; additionalLightIndex < lightsData.AdditionalLights.Count; additionalLightIndex++)
+            {
+                if (additionalLightIndex >= _additionalShadowMetadata.Length)
                 {
-                    ToonLightsData.AdditionalLight additionalLight = lightsData.AdditionalLights[additionalLightIndex];
-                    if (additionalLight.ShadowLightIndex == null)
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    int visibleLightIndex = additionalLight.VisibleLightIndex;
-                    Light light = _cullingResults.visibleLights[visibleLightIndex].light;
-                    if (_cullingResults.ComputeSpotShadowMatricesAndCullingPrimitives(visibleLightIndex, out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix, out ShadowSplitData _))
+                ToonLightsData.AdditionalLight additionalLight = lightsData.AdditionalLights[additionalLightIndex];
+                int visibleLightIndex = additionalLight.VisibleLightIndex;
+                VisibleLight visibleLight = _cullingResults.visibleLights[visibleLightIndex];
+                Light light = visibleLight.light;
+
+                if (light.shadows == LightShadows.None)
+                {
+                    continue;
+                }
+
+                if (!_cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds _))
+                {
+                    continue;
+                }
+
+                switch (visibleLight.lightType)
+                {
+                    case LightType.Spot:
                     {
-                        int shadowLightIndex = additionalLight.ShadowLightIndex.Value;
-                        SetTileViewport(cmd, shadowLightIndex, split, tileSize, out Vector2 offset);
-                        _additionalShadowMatricesVp[shadowLightIndex] = ConvertToAtlasMatrix(projectionMatrix * viewMatrix, offset, split);
-                        _additionalShadowMetadata[additionalLightIndex] = new Vector4(shadowLightIndex, 0, 0, 0);
+                        if (!_cullingResults.ComputeSpotShadowMatricesAndCullingPrimitives(visibleLightIndex,
+                                out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix, out ShadowSplitData splitData
+                            ))
+                        {
+                            continue;
+                        }
+
+                        SetTileViewport(cmd, tileIndex, split, tileSize, out Vector2 offset);
+                        _additionalShadowMatricesVp[tileIndex] =
+                            ConvertToAtlasMatrix(projectionMatrix * viewMatrix, offset, split);
+                        _additionalShadowMetadata[additionalLightIndex] = new Vector4(tileIndex, 1, 0, 0);
 
                         cmd.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
                         BindLightParams(cmd, light, light.shadowBias, -light.shadowNormalBias, 0.0f);
 
                         _context.ExecuteCommandBufferAndClear(cmd);
 
-                        var shadowSettings = new ShadowDrawingSettings(_cullingResults, visibleLightIndex, BatchCullingProjectionType.Perspective);
+                        var shadowSettings = new ShadowDrawingSettings(_cullingResults, visibleLightIndex,
+                            BatchCullingProjectionType.Perspective
+                        )
+                        {
+                            splitData = splitData,
+                        };
                         _context.DrawShadows(ref shadowSettings);
+
+                        ++tileIndex;
+                        break;
+                    }
+
+                    case LightType.Point:
+                    {
+                        if (!_settings.ShadowMaps.Additional.Point.Enabled)
+                        {
+                            continue;
+                        }
+
+                        int baseTile = tileIndex;
+                        bool renderedAnyFace = false;
+
+                        for (int face = 0; face < MaxPointShadowFaces; face++)
+                        {
+                            if (!_cullingResults.ComputePointShadowMatricesAndCullingPrimitives(visibleLightIndex,
+                                    (CubemapFace) face, 2.0f, out Matrix4x4 viewMatrix,
+                                    out Matrix4x4 projectionMatrix, out ShadowSplitData splitData
+                                ))
+                            {
+                                continue;
+                            }
+
+                            int shadowTile = baseTile + face;
+                            SetTileViewport(cmd, shadowTile, split, tileSize, out Vector2 offset);
+                            _additionalShadowMatricesVp[shadowTile] =
+                                ConvertToAtlasMatrix(projectionMatrix * viewMatrix, offset, split);
+
+                            cmd.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+                            BindLightParams(cmd, light, light.shadowBias, -light.shadowNormalBias, 0.0f);
+
+                            _context.ExecuteCommandBufferAndClear(cmd);
+
+                            var shadowSettings = new ShadowDrawingSettings(_cullingResults, visibleLightIndex,
+                                BatchCullingProjectionType.Perspective
+                            )
+                            {
+                                splitData = splitData,
+                            };
+                            _context.DrawShadows(ref shadowSettings);
+
+                            renderedAnyFace = true;
+                        }
+
+                        _additionalShadowMetadata[additionalLightIndex] = renderedAnyFace
+                            ? new Vector4(baseTile, MaxPointShadowFaces, 0, 0)
+                            : defaultMetadata;
+
+                        tileIndex = baseTile + MaxPointShadowFaces;
+                        break;
                     }
                 }
+            }
 
-                cmd.SetGlobalMatrixArray(AdditionalShadowsVpId, _additionalShadowMatricesVp);
-                cmd.SetGlobalVectorArray(AdditionalShadowsMetadataId, _additionalShadowMetadata);
-                cmd.EnableKeyword(ToonShadows.AdditionalShadowsGlobalKeyword);
-            }
-            else
-            {
-                cmd.DisableKeyword(ToonShadows.AdditionalShadowsGlobalKeyword);
-            }
+            cmd.SetGlobalMatrixArray(AdditionalShadowsVpId, _additionalShadowMatricesVp);
+            cmd.SetGlobalVectorArray(AdditionalShadowsMetadataId, _additionalShadowMetadata);
+            cmd.EnableKeyword(ToonShadows.AdditionalShadowsGlobalKeyword);
         }
 
         private void ExecuteBlur(CommandBuffer cmd)
