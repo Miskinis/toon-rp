@@ -239,7 +239,8 @@ namespace DELTation.ToonRP.Shadows
                             SoftShadows: { Enabled: true, Quality: SoftShadowsQuality.High, EarlyBail: true },
                         }
                     );
-                    cmd.SetKeyword(ToonShadows.ShadowsRampCrisp, _settings.CrispAntiAliased);
+                    // The shadow ramp keyword is a global lighting style, set by ToonShadows.Setup.
+                    // Do not toggle it per shadow pass: point/spot-only scenes would lose it.
                     cmd.SetGlobalFloat(ZClipId, 0);
 
                     RenderDirectionalShadows(cmd, depthBits);
@@ -257,7 +258,6 @@ namespace DELTation.ToonRP.Shadows
                     cmd.DisableKeyword(ToonShadows.PoissonStratifiedGlobalKeyword);
                     cmd.DisableKeyword(ToonShadows.PoissonRotatedGlobalKeyword);
                     cmd.DisableKeyword(ToonShadows.PoissonEarlyBailGlobalKeyword);
-                    cmd.DisableKeyword(ToonShadows.ShadowsRampCrisp);
                 }
             }
 
