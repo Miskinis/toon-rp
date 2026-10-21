@@ -33,8 +33,13 @@ SAMPLER_CMP(sampler_LinearClampCompare);
 TEXTURE2D(_ToonRP_ShadowPattern);
 SAMPLER(sampler_ToonRP_ShadowPattern);
 
+#ifdef _TOON_RP_VSM
+TEXTURE2D(_ToonRP_AdditionalShadows);
+SAMPLER(sampler_ToonRP_AdditionalShadows);
+#else // !_TOON_RP_VSM
 TEXTURE2D_SHADOW(_ToonRP_AdditionalShadows);
 SAMPLER_CMP(sampler_ToonRP_AdditionalShadows);
+#endif // _TOON_RP_VSM
 
 CBUFFER_START(_ToonRpShadows)
     float4x4 _ToonRP_DirectionalShadowMatrices_VP[MAX_DIRECTIONAL_LIGHT_COUNT * MAX_CASCADE_COUNT];
@@ -166,13 +171,37 @@ float SampleShadowAttenuation(const float3 shadowCoords, const float3 positionWs
 
 float SampleAdditionalShadowAttenuation(const float3 shadowCoords, const uint shadowIndex)
 {
+    #ifdef _TOON_RP_VSM
+    const float2 varianceSample = SAMPLE_TEXTURE2D(
+        _ToonRP_AdditionalShadows, sampler_ToonRP_AdditionalShadows, shadowCoords.xy
+    ).rg;
+    const float variance = varianceSample.y - varianceSample.x * varianceSample.x +
+        _ToonRP_ShadowPrecisionCompensation;
+
+    #ifdef UNITY_REVERSED_Z
+    const float difference = shadowCoords.z - varianceSample.x;
+    #else // !UNITY_REVERSED_Z
+    const float difference = varianceSample.x - shadowCoords.z;
+    #endif // UNITY_REVERSED_Z
+
+    if (difference > 0.00001)
+    {
+        return InverseLerpClamped(
+            _ToonRP_ShadowLightBleedingReduction, 1.0, variance / (variance + difference * difference)
+        );
+    }
+
+    return 1.0;
+    #else // !_TOON_RP_VSM
     return SAMPLE_TEXTURE2D_SHADOW(_ToonRP_AdditionalShadows, sampler_ToonRP_AdditionalShadows, shadowCoords).r;
+    #endif // _TOON_RP_VSM
 }
 
 float SampleAdditionalShadowAttenuationFiltered(const float3 shadowCoords, const uint shadowIndex)
 {
     float attenuation = SampleAdditionalShadowAttenuation(shadowCoords, shadowIndex);
 
+    #ifndef _TOON_RP_VSM
     if (_ToonRP_AdditionalShadowFilterScale > 0)
     {
         const float2 texel = _ToonRP_AdditionalShadowTexelSize.xx * _ToonRP_AdditionalShadowFilterScale;
@@ -192,6 +221,7 @@ float SampleAdditionalShadowAttenuationFiltered(const float3 shadowCoords, const
         );
         attenuation *= 0.25;
     }
+    #endif // _TOON_RP_VSM
 
     return attenuation;
 }
@@ -243,7 +273,14 @@ float3 TransformWorldToAdditionalShadowCoords(const float3 positionWs, uint shad
 
     if (perspectiveProjection)
     {
-        shadowCoords.xyz /= shadowCoords.w;
+        // The atlas coordinates are perspective-projected, but the VSM depth is the packed linear
+        // view-space depth produced by GetPackedVsmDepth in the shadow caster, so it must not be
+        // divided by w (unlike the hardware depth compare used in the non-VSM path).
+        shadowCoords.xy /= shadowCoords.w;
+
+        #ifndef _TOON_RP_VSM
+        shadowCoords.z /= shadowCoords.w;
+        #endif // !_TOON_RP_VSM
     }
 
     return shadowCoords.xyz;

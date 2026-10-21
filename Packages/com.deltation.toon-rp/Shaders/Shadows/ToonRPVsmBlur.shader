@@ -112,5 +112,94 @@
 
 			ENDHLSL
 		}
+
+	    Pass
+		{
+		    Name "Toon RP VSM Gaussian Blur Additional (Horizontal)"
+
+			HLSLPROGRAM
+
+			#pragma multi_compile_local_fragment _ _TOON_RP_VSM_BLUR_HIGH_QUALITY
+            #pragma multi_compile_local_fragment _ _TOON_RP_VSM_BLUR_EARLY_BAIL
+
+			#define TOON_RP_VSM_BLUR_TILE_CLAMP
+			#include "ToonRPGaussianBlur.hlsl"
+
+			TEXTURE2D(_ToonRP_AdditionalShadows);
+			SAMPLER(sampler_ToonRP_AdditionalShadows);
+			DECLARE_TEXEL_SIZE(_ToonRP_AdditionalShadows);
+
+			float2 PS(const v2f IN) : SV_TARGET
+            {
+                return Blur(
+                    TEXTURE2D_ARGS(_ToonRP_AdditionalShadows, sampler_ToonRP_AdditionalShadows),
+                    _ToonRP_AdditionalShadows_TexelSize.xy,
+                    IN.uv, float2(_ToonRP_VSM_BlurScatter, 0.0f));
+            }
+
+			ENDHLSL
+		}
+
+	    Pass
+		{
+		    Name "Toon RP VSM Gaussian Blur Additional (Vertical)"
+
+			HLSLPROGRAM
+
+			#pragma multi_compile_local_fragment _ _TOON_RP_VSM_BLUR_HIGH_QUALITY
+            #pragma multi_compile_local_fragment _ _TOON_RP_VSM_BLUR_EARLY_BAIL
+
+			#define TOON_RP_VSM_BLUR_TILE_CLAMP
+			#include "ToonRPGaussianBlur.hlsl"
+
+			TEXTURE2D(_ToonRP_AdditionalShadows_Temp);
+			SAMPLER(sampler_ToonRP_AdditionalShadows_Temp);
+			DECLARE_TEXEL_SIZE(_ToonRP_AdditionalShadows_Temp);
+
+			float2 PS(const v2f IN) : SV_TARGET
+            {
+                return Blur(
+                    TEXTURE2D_ARGS(_ToonRP_AdditionalShadows_Temp, sampler_ToonRP_AdditionalShadows_Temp),
+                    _ToonRP_AdditionalShadows_Temp_TexelSize.xy,
+                    IN.uv, float2(0.0f, _ToonRP_VSM_BlurScatter));
+            }
+
+			ENDHLSL
+		}
+
+	    Pass
+		{
+		    Name "Toon RP VSM Box Blur Additional"
+
+			HLSLPROGRAM
+
+			TEXTURE2D(_ToonRP_AdditionalShadows_Temp);
+			SAMPLER(sampler_ToonRP_AdditionalShadows_Temp);
+			DECLARE_TEXEL_SIZE(_ToonRP_AdditionalShadows_Temp);
+
+			float2 Blur(TEXTURE2D_PARAM(tex, texSampler), const float2 texelSize, const float2 uv)
+			{
+                float2 result = 0;
+
+                result += SAMPLE_TEXTURE2D(tex, texSampler, uv + float2(0.5, 0.5) * texelSize).rg;
+                result += SAMPLE_TEXTURE2D(tex, texSampler, uv + float2(-0.5, 0.5) * texelSize).rg;
+                result += SAMPLE_TEXTURE2D(tex, texSampler, uv + float2(0.5, -0.5) * texelSize).rg;
+                result += SAMPLE_TEXTURE2D(tex, texSampler, uv + float2(-0.5, -0.5) * texelSize).rg;
+
+                return result * 0.25;
+			}
+
+			float2 PS(const v2f IN) : SV_TARGET
+            {
+                const float2 texelSize = _ToonRP_AdditionalShadows_Temp_TexelSize.xy * _ToonRP_VSM_BlurScatter;
+                const float2 uv = IN.uv;
+                return Blur(
+                    TEXTURE2D_ARGS(_ToonRP_AdditionalShadows_Temp, sampler_ToonRP_AdditionalShadows_Temp),
+                    texelSize, uv
+                    );
+            }
+
+			ENDHLSL
+		}
 	}
 }
