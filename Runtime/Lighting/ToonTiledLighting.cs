@@ -174,7 +174,13 @@ namespace DELTation.ToonRP.Lighting
         public void SetTiledLightingKeyword(CommandBuffer cmd, bool enabled)
         {
             cmd.SetKeyword(_tiledLightingKeyword, enabled);
-            _lighting.SetAdditionalLightsKeywords(cmd, ToonCameraRendererSettings.AdditionalLightsMode.Off);
+
+            // Tiled lighting and per-pixel additional lights are mutually exclusive.
+            // When tiled lighting is off, keep the per-pixel keyword set by ToonLighting.Setup.
+            if (enabled)
+            {
+                _lighting.SetAdditionalLightsKeywords(cmd, ToonCameraRendererSettings.AdditionalLightsMode.Off);
+            }
         }
 
         private static class ShaderIds
