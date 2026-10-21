@@ -85,6 +85,7 @@ struct LightEntry
     half3 spotDir;
     half2 spotAttenuation;
     int shadowIndex;
+    int shadowFaceCount;
 };
 
 int GetLightShadowIndex(const uint globalLightIndex)
@@ -96,6 +97,16 @@ int GetLightShadowIndex(const uint globalLightIndex)
     }
     
     return -1;
+}
+
+int GetLightShadowFaceCount(const uint globalLightIndex)
+{
+    if (globalLightIndex < MAX_ADDITIONAL_LIGHT_SHADOWS_COUNT)
+    {
+        return (int) _ToonRP_AdditionalShadows_Metadata[globalLightIndex].y;
+    }
+
+    return 0;
 }
 
 LightEntry GetUniformLightEntry(const uint globalLightIndex)
@@ -121,6 +132,7 @@ LightEntry GetUniformLightEntry(const uint globalLightIndex)
     }
 
     lightEntry.shadowIndex = GetLightShadowIndex(globalLightIndex);
+    lightEntry.shadowFaceCount = GetLightShadowFaceCount(globalLightIndex);
     
     return lightEntry;
 }
@@ -167,8 +179,18 @@ Light ConvertEntryToLight(const LightEntry lightEntry, const float3 positionWs)
     UNITY_BRANCH
     if (lightEntry.shadowIndex >= 0)
     {
-        const float3 shadowCoords = TransformWorldToAdditionalShadowCoords(positionWs, lightEntry.shadowIndex);
-        light.shadowAttenuation = SampleAdditionalShadowAttenuation(shadowCoords, lightEntry.shadowIndex);
+        if (lightEntry.shadowFaceCount > 1)
+        {
+            light.shadowAttenuation = SamplePointShadowAttenuation(
+                positionWs, lightEntry.positionWs, lightEntry.shadowIndex
+            );
+        }
+        else
+        {
+            const uint shadowIndex = (uint) lightEntry.shadowIndex;
+            const float3 shadowCoords = TransformWorldToAdditionalShadowCoords(positionWs, shadowIndex);
+            light.shadowAttenuation = SampleAdditionalShadowAttenuation(shadowCoords, shadowIndex);
+        }
     }
     else
 #endif // _TOON_RP_ADDITIONAL_SHADOWS

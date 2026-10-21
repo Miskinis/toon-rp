@@ -16,6 +16,10 @@
 
 #define MAX_DIRECTIONAL_LIGHT_COUNT 1
 #define MAX_ADDITIONAL_LIGHT_SHADOWS_COUNT 16
+#define MAX_POINT_SHADOW_FACES 6
+
+// One tile per cubemap face. Must mirror ToonShadowMaps.MaxAdditionalShadowTiles.
+#define MAX_ADDITIONAL_SHADOW_TILES (MAX_ADDITIONAL_LIGHT_SHADOWS_COUNT * MAX_POINT_SHADOW_FACES)
 #define MAX_CASCADE_COUNT 4
 
 #ifdef _TOON_RP_VSM
@@ -43,7 +47,7 @@ CBUFFER_START(_ToonRpShadows)
     float2 _ToonRP_ShadowBias; // x - depth, y - normal
     float3 _ToonRP_ShadowPatternScale;
 
-    float4x4 _ToonRP_AdditionalShadowMatrices_VP[MAX_ADDITIONAL_LIGHT_SHADOWS_COUNT];
+    float4x4 _ToonRP_AdditionalShadowMatrices_VP[MAX_ADDITIONAL_SHADOW_TILES];
     half4 _ToonRP_AdditionalShadows_Metadata[MAX_ADDITIONAL_LIGHT_SHADOWS_COUNT];
 
     uint _ToonRP_PoissonDiskSize;
@@ -213,6 +217,32 @@ float3 TransformWorldToAdditionalShadowCoords(const float3 positionWs, uint shad
     }
 
     return shadowCoords.xyz;
+}
+
+// Matches Unity's CubemapFace order: +X, -X, +Y, -Y, +Z, -Z.
+int ComputePointShadowFace(const float3 lightToPosition)
+{
+    const float3 absDirection = abs(lightToPosition);
+
+    if (absDirection.x >= absDirection.y && absDirection.x >= absDirection.z)
+    {
+        return lightToPosition.x >= 0.0f ? 0 : 1;
+    }
+
+    if (absDirection.y >= absDirection.z)
+    {
+        return lightToPosition.y >= 0.0f ? 2 : 3;
+    }
+
+    return lightToPosition.z >= 0.0f ? 4 : 5;
+}
+
+float SamplePointShadowAttenuation(const float3 positionWs, const float3 lightPositionWs, const int baseTile)
+{
+    const int face = ComputePointShadowFace(positionWs - lightPositionWs);
+    const uint shadowIndex = (uint) (baseTile + face);
+    const float3 shadowCoords = TransformWorldToAdditionalShadowCoords(positionWs, shadowIndex);
+    return SampleAdditionalShadowAttenuation(shadowCoords, shadowIndex);
 }
 
 float ComputeShadowRamp(const float shadowAttenuation)

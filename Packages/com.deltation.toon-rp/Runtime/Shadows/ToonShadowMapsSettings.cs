@@ -130,6 +130,14 @@ namespace DELTation.ToonRP.Shadows
             public bool Enabled;
             [ToonRpShowIf(nameof(Enabled))]
             public TextureSize AtlasSize;
+
+            [Serializable]
+            public struct PointShadows
+            {
+                public bool Enabled;
+            }
+
+            public PointShadows Point;
         }
     }
 }

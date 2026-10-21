@@ -54,6 +54,7 @@ LightEntry GetTiledLightEntry(const uint globalLightIndex)
     lightEntry.spotAttenuation = half2((half) f16tof32(spotAttenuation >> 16), (half) f16tof32(spotAttenuation));
 
     lightEntry.shadowIndex = GetLightShadowIndex(globalLightIndex);
+    lightEntry.shadowFaceCount = GetLightShadowFaceCount(globalLightIndex);
     
     return lightEntry;
 }
