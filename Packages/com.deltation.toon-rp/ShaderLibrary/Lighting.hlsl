@@ -90,23 +90,27 @@ struct LightEntry
 
 int GetLightShadowIndex(const uint globalLightIndex)
 {
+    int shadowIndex = -1;
+
     if (globalLightIndex < MAX_ADDITIONAL_LIGHT_SHADOWS_COUNT)
     {
         const half4 metadata = _ToonRP_AdditionalShadows_Metadata[globalLightIndex];
-        return metadata.x;
+        shadowIndex = (int) metadata.x;
     }
-    
-    return -1;
+
+    return shadowIndex;
 }
 
 int GetLightShadowFaceCount(const uint globalLightIndex)
 {
+    int faceCount = 0;
+
     if (globalLightIndex < MAX_ADDITIONAL_LIGHT_SHADOWS_COUNT)
     {
-        return (int) _ToonRP_AdditionalShadows_Metadata[globalLightIndex].y;
+        faceCount = (int) _ToonRP_AdditionalShadows_Metadata[globalLightIndex].y;
     }
 
-    return 0;
+    return faceCount;
 }
 
 LightEntry GetUniformLightEntry(const uint globalLightIndex)
@@ -189,7 +193,7 @@ Light ConvertEntryToLight(const LightEntry lightEntry, const float3 positionWs)
         {
             const uint shadowIndex = (uint) lightEntry.shadowIndex;
             const float3 shadowCoords = TransformWorldToAdditionalShadowCoords(positionWs, shadowIndex);
-            light.shadowAttenuation = SampleAdditionalShadowAttenuation(shadowCoords, shadowIndex);
+            light.shadowAttenuation = SampleAdditionalShadowAttenuationFiltered(shadowCoords, shadowIndex);
         }
     }
     else
