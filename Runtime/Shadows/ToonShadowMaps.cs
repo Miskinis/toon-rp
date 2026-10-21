@@ -65,6 +65,12 @@ namespace DELTation.ToonRP.Shadows
         private static readonly int AdditionalShadowsDepthId = Shader.PropertyToID("_ToonRP_AdditionalShadows");
         private static readonly int AdditionalShadowsVpId = Shader.PropertyToID("_ToonRP_AdditionalShadowMatrices_VP");
         private static readonly int AdditionalShadowsMetadataId = Shader.PropertyToID("_ToonRP_AdditionalShadows_Metadata");
+
+        private static readonly int AdditionalShadowTexelSizeId =
+            Shader.PropertyToID("_ToonRP_AdditionalShadowTexelSize");
+
+        private static readonly int AdditionalShadowFilterScaleId =
+            Shader.PropertyToID("_ToonRP_AdditionalShadowFilterScale");
         
         private static readonly int ZClipId = Shader.PropertyToID("_ZClip");
 
@@ -546,6 +552,11 @@ namespace DELTation.ToonRP.Shadows
             cmd.GetTemporaryRT(AdditionalShadowsDepthId, resolution, resolution, depthBits, ShadowmapFiltering, DepthRenderTextureFormat);
             cmd.SetRenderTarget(AdditionalShadowsDepthId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
             cmd.ClearRenderTarget(true, false, Color.clear);
+
+            cmd.SetGlobalFloat(AdditionalShadowTexelSizeId, 1.0f / resolution);
+            cmd.SetGlobalFloat(AdditionalShadowFilterScaleId,
+                _shadowMapsSettings.SoftShadows.Enabled ? _shadowMapsSettings.SoftShadows.Spread : 0.0f
+            );
 
             int tileIndex = 0;
 

@@ -59,6 +59,9 @@ CBUFFER_END
 TEXTURE3D(_ToonRP_RotatedPoissonSamplingTexture);
 SAMPLER(sampler_ToonRP_RotatedPoissonSamplingTexture);
 
+float _ToonRP_AdditionalShadowTexelSize;
+float _ToonRP_AdditionalShadowFilterScale;
+
 float3 ApplyShadowBias(float3 positionWs, const float3 normalWs, const float3 lightDirection)
 {
     const float invNDotL = 1.0 - saturate(dot(lightDirection, normalWs));
@@ -166,6 +169,33 @@ float SampleAdditionalShadowAttenuation(const float3 shadowCoords, const uint sh
     return SAMPLE_TEXTURE2D_SHADOW(_ToonRP_AdditionalShadows, sampler_ToonRP_AdditionalShadows, shadowCoords).r;
 }
 
+float SampleAdditionalShadowAttenuationFiltered(const float3 shadowCoords, const uint shadowIndex)
+{
+    float attenuation = SampleAdditionalShadowAttenuation(shadowCoords, shadowIndex);
+
+    if (_ToonRP_AdditionalShadowFilterScale > 0)
+    {
+        const float2 texel = _ToonRP_AdditionalShadowTexelSize.xx * _ToonRP_AdditionalShadowFilterScale;
+
+        attenuation = 0;
+        attenuation += SampleAdditionalShadowAttenuation(
+            shadowCoords + float3(-texel.x, -texel.y, 0), shadowIndex
+        );
+        attenuation += SampleAdditionalShadowAttenuation(
+            shadowCoords + float3(texel.x, -texel.y, 0), shadowIndex
+        );
+        attenuation += SampleAdditionalShadowAttenuation(
+            shadowCoords + float3(-texel.x, texel.y, 0), shadowIndex
+        );
+        attenuation += SampleAdditionalShadowAttenuation(
+            shadowCoords + float3(texel.x, texel.y, 0), shadowIndex
+        );
+        attenuation *= 0.25;
+    }
+
+    return attenuation;
+}
+
 float SampleShadowPattern(const float3 positionWs)
 {
     const float2 uv = EncodePositionToUv(positionWs, _ToonRP_ShadowPatternScale);
@@ -242,7 +272,7 @@ float SamplePointShadowAttenuation(const float3 positionWs, const float3 lightPo
     const int face = ComputePointShadowFace(positionWs - lightPositionWs);
     const uint shadowIndex = (uint) (baseTile + face);
     const float3 shadowCoords = TransformWorldToAdditionalShadowCoords(positionWs, shadowIndex);
-    return SampleAdditionalShadowAttenuation(shadowCoords, shadowIndex);
+    return SampleAdditionalShadowAttenuationFiltered(shadowCoords, shadowIndex);
 }
 
 float ComputeShadowRamp(const float shadowAttenuation)
