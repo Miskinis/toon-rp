@@ -17,11 +17,13 @@ A point light is rendered into six atlas tiles, one per cubemap face (`+X`, `-X`
 
 Spot and point lights can be mixed freely. Each light keeps its own atlas tile range.
 
+Point and spot shadow attenuation is passed through the same toon shadow ramp and pattern as the directional shadows.
+
 ### Limitations
 
 - A point light consumes six additional-shadow tiles. The default limit of 16 additional shadowed lights gives a maximum of 96 tiles.
 - The atlas resolution is shared with spot lights. Raise `Additional/Atlas Size` when several point lights cast shadows.
-- Additional-light shadows (spot and point) use a single shadow lookup. The `Soft Shadows` and VSM settings apply to directional shadows; point-light shadows are intentionally crisp. Use the light's bias settings to control acne and peter-panning.
+- Additional-light shadows use a single shadow lookup. The toon shadow ramp (`Threshold`, `Smoothness`, `Crisp Anti Aliased`) and the world-space `Pattern` are applied; directional-only soft-shadow/VSM filtering is not. Use the light's bias settings to control acne and peter-panning.
 - Additional-light shadows require `Additional Lights` to be enabled (`Per Pixel` mode). Tiled lighting is supported.
 
 ### Troubleshooting
