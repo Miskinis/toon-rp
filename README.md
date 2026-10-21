@@ -21,18 +21,20 @@ Point and spot shadow attenuation is passed through the same toon shadow ramp an
 
 ### Quality settings
 
-Point shadows share the additional-light atlas. For quality close to the directional path:
+Point shadows share the additional-light atlas and use the same VSM path as directional shadows: a two-channel moments atlas, a Gaussian blur, and the same light-bleeding reduction and precision compensation.
 
 - Set `Additional/Atlas Size` to `2048` or `4096`. A point light consumes six tiles, so the per-face resolution is `atlasSize / ceil(sqrt(totalTiles))`.
-- Keep `Soft Shadows` enabled. Additional-light shadows use a 4-tap PCF scaled by `Soft Shadows/Spread`; `Quality` does not change the tap count yet.
-- Directional shadows use the VSM Gaussian blur; the additional path uses PCF instead. Both paths use the toon shadow ramp and pattern.
+- The additional blur is clamped to each atlas tile, so the kernel never samples a neighbouring cubemap face.
+- `Blur` (`Box`, `Gaussian Low Quality`, `Gaussian High Quality`), `Blur Scatter`, `Blur Early Bail`, `Light Bleeding Reduction`, `VSM Precision`, and `Precision Compensation` apply to both shadow atlases.
+- `Soft Shadows/Spread` only affects the non-VSM PCF path. With VSM, shadow softness comes from `Blur Scatter`.
 - Use the light's `Shadow Normal Bias` first, then `Shadow Bias`, to control acne.
 
 ### Limitations
 
 - A point light consumes six additional-shadow tiles. The default limit of 16 additional shadowed lights gives a maximum of 96 tiles.
+- The additional shadow matrix array grows to 96 entries; on GLES3 the fragment uniform budget may require a lower `MaxShadowedAdditionalLightsCount`.
 - The atlas resolution is shared with spot lights. Raise `Additional/Atlas Size` when several point lights cast shadows.
-- Additional-light shadows use a 4-tap PCF lookup. The toon shadow ramp (`Threshold`, `Smoothness`, `Crisp Anti Aliased`) and the world-space `Pattern` are applied; the directional VSM Gaussian blur is not. Use the light's bias settings to control acne and peter-panning.
+- Per-face resolution is lower than the directional atlas, because one point light uses six tiles. Fewer shadowed point lights or a bigger atlas improves the result.
 - Additional-light shadows require `Additional Lights` to be enabled (`Per Pixel` mode). Tiled lighting is supported.
 
 ### Troubleshooting
@@ -40,4 +42,4 @@ Point shadows share the additional-light atlas. For quality close to the directi
 - **No shadow:** confirm `Additional/Point` is enabled, the light is `Realtime`, `Shadow Type` is not `No Shadows`, and the light range contains both the receiver and a shadow caster.
 - **Shadow acne:** increase the light's `Shadow Normal Bias` first, then `Shadow Bias`.
 - **Detached shadows:** reduce `Shadow Normal Bias` and `Shadow Bias`.
-- **Seams between faces:** increase `Additional/Atlas Size` or reduce the number of shadowed point lights.
+- **Seams between faces:** raise `Additional/Atlas Size` or reduce the number of shadowed point lights.
