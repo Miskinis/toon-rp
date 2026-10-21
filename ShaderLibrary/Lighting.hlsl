@@ -195,6 +195,8 @@ Light ConvertEntryToLight(const LightEntry lightEntry, const float3 positionWs)
             const float3 shadowCoords = TransformWorldToAdditionalShadowCoords(positionWs, shadowIndex);
             light.shadowAttenuation = SampleAdditionalShadowAttenuationFiltered(shadowCoords, shadowIndex);
         }
+
+        light.shadowAttenuation *= ComputeShadowDistanceFade(positionWs);
     }
     else
 #endif // _TOON_RP_ADDITIONAL_SHADOWS
