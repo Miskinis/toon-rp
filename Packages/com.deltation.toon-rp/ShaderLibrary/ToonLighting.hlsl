@@ -194,7 +194,8 @@ void ComputeAdditionalLightsDiffuseSpecular(const LightComputationParameters par
         const Light light = GetAdditionalLight(i, parameters.positionWs);
         #endif // _TOON_RP_TILED_LIGHTING
         float nDotL = dot(parameters.normalWs, light.direction);
-        const float attenuation = light.distanceAttenuation * light.shadowAttenuation * ssao;
+        const float shadowAttenuation = GetAdditionalShadowAttenuation(parameters, light);
+        const float attenuation = light.distanceAttenuation * shadowAttenuation * ssao;
         nDotL = min(nDotL * attenuation, attenuation);
 
         const float rampCutoffEdge = 0.00001f;
