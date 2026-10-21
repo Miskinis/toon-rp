@@ -196,7 +196,9 @@ Light ConvertEntryToLight(const LightEntry lightEntry, const float3 positionWs)
             light.shadowAttenuation = SampleAdditionalShadowAttenuationFiltered(shadowCoords, shadowIndex);
         }
 
-        light.shadowAttenuation *= ComputeShadowDistanceFade(positionWs);
+        light.shadowAttenuation = lerp(
+            light.shadowAttenuation, 1.0f, ComputeShadowDistanceFade(positionWs)
+        );
     }
     else
 #endif // _TOON_RP_ADDITIONAL_SHADOWS
