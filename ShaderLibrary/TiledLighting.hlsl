@@ -55,6 +55,8 @@ LightEntry GetTiledLightEntry(const uint globalLightIndex)
 
     lightEntry.shadowIndex = GetLightShadowIndex(globalLightIndex);
     lightEntry.shadowFaceCount = GetLightShadowFaceCount(globalLightIndex);
+    lightEntry.shadowFaceMask = GetLightShadowFaceMask(globalLightIndex);
+    lightEntry.shadowStrength = GetLightShadowStrength(globalLightIndex);
     
     return lightEntry;
 }

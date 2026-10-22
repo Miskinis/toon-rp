@@ -51,6 +51,7 @@ CBUFFER_START(_ToonRpShadows)
     float2 _ToonRP_ShadowDistanceFade;
     float2 _ToonRP_ShadowBias; // x - depth, y - normal
     float3 _ToonRP_ShadowPatternScale;
+    float _ToonRP_ShadowPatternStrength;
 
     float4x4 _ToonRP_AdditionalShadowMatrices_VP[MAX_ADDITIONAL_SHADOW_TILES];
     half4 _ToonRP_AdditionalShadows_Metadata[MAX_ADDITIONAL_LIGHT_SHADOWS_COUNT];
@@ -66,6 +67,8 @@ SAMPLER(sampler_ToonRP_RotatedPoissonSamplingTexture);
 
 float _ToonRP_AdditionalShadowTexelSize;
 float _ToonRP_AdditionalShadowFilterScale;
+// Number of tiles along one axis of the additional shadow atlas.
+float _ToonRP_AdditionalShadows_Split;
 
 float3 ApplyShadowBias(float3 positionWs, const float3 normalWs, const float3 lightDirection)
 {
@@ -169,11 +172,26 @@ float SampleShadowAttenuation(const float3 shadowCoords, const float3 positionWs
     #endif
 }
 
+float2 ClampAdditionalShadowUvToTile(const float2 uv, const uint tileIndex)
+{
+    const int split = max((int) _ToonRP_AdditionalShadows_Split, 1);
+    const float tileSize = 1.0f / split;
+    const int tileX = (int) (tileIndex % (uint) split);
+    const int tileY = (int) (tileIndex / (uint) split);
+    const float2 tileMin = float2(tileX, tileY) * tileSize;
+    const float2 tileMax = tileMin + tileSize;
+    // Inset by half a texel so bilinear taps never reach the neighbouring tile.
+    const float halfTexel = _ToonRP_AdditionalShadowTexelSize * 0.5f;
+    return clamp(uv, tileMin + halfTexel, tileMax - halfTexel);
+}
+
 float SampleAdditionalShadowAttenuation(const float3 shadowCoords, const uint shadowIndex)
 {
+    const float2 shadowUv = ClampAdditionalShadowUvToTile(shadowCoords.xy, shadowIndex);
+
     #ifdef _TOON_RP_VSM
     const float2 varianceSample = SAMPLE_TEXTURE2D(
-        _ToonRP_AdditionalShadows, sampler_ToonRP_AdditionalShadows, shadowCoords.xy
+        _ToonRP_AdditionalShadows, sampler_ToonRP_AdditionalShadows, shadowUv
     ).rg;
     const float variance = varianceSample.y - varianceSample.x * varianceSample.x +
         _ToonRP_ShadowPrecisionCompensation;
@@ -193,7 +211,8 @@ float SampleAdditionalShadowAttenuation(const float3 shadowCoords, const uint sh
 
     return 1.0;
     #else // !_TOON_RP_VSM
-    return SAMPLE_TEXTURE2D_SHADOW(_ToonRP_AdditionalShadows, sampler_ToonRP_AdditionalShadows, shadowCoords).r;
+    return SAMPLE_TEXTURE2D_SHADOW(_ToonRP_AdditionalShadows, sampler_ToonRP_AdditionalShadows,
+                                   float3(shadowUv, shadowCoords.z)).r;
     #endif // _TOON_RP_VSM
 }
 
@@ -304,9 +323,16 @@ int ComputePointShadowFace(const float3 lightToPosition)
     return lightToPosition.z >= 0.0f ? 4 : 5;
 }
 
-float SamplePointShadowAttenuation(const float3 positionWs, const float3 lightPositionWs, const int baseTile)
+float SamplePointShadowAttenuation(const float3 positionWs, const float3 lightPositionWs, const int baseTile,
+                                   const int faceMask)
 {
     const int face = ComputePointShadowFace(positionWs - lightPositionWs);
+    if ((faceMask & (1 << face)) == 0)
+    {
+        // The face failed to render this frame (or was never rendered), so do not sample its stale tile.
+        return 1.0f;
+    }
+
     const uint shadowIndex = (uint) (baseTile + face);
     const float3 shadowCoords = TransformWorldToAdditionalShadowCoords(positionWs, shadowIndex);
     return SampleAdditionalShadowAttenuationFiltered(shadowCoords, shadowIndex);

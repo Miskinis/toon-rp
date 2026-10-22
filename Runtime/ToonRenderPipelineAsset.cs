@@ -75,6 +75,8 @@ namespace DELTation.ToonRP
             MaxDistance = 100.0f,
             DistanceFade = 0.1f,
             PatternScale = new Vector3(1, 0, 1),
+            PatternStrength = 3.0f,
+            PatternStrengthSet = true,
             ShadowMaps = new ToonShadowMapsSettings
             {
                 DepthBits = ToonShadowMapsSettings.ShadowMapBits._16,
@@ -94,6 +96,12 @@ namespace DELTation.ToonRP
                 Additional = new ToonShadowMapsSettings.AdditionalShadows
                 {
                     Enabled = false, AtlasSize = TextureSize._1024,
+                    Point =
+                    {
+                        Enabled = false,
+                        FovBias = 2.0f,
+                        FovBiasSet = true,
+                    },
                 },
                 SoftShadows =
                 {
@@ -173,6 +181,18 @@ namespace DELTation.ToonRP
             if (ShadowSettings.ShadowMaps.BlurScatter < 1.0f)
             {
                 ShadowSettings.ShadowMaps.BlurScatter = 1.0f;
+            }
+
+            if (!ShadowSettings.PatternStrengthSet)
+            {
+                ShadowSettings.PatternStrength = 3.0f;
+                ShadowSettings.PatternStrengthSet = true;
+            }
+
+            if (!ShadowSettings.ShadowMaps.Additional.Point.FovBiasSet)
+            {
+                ShadowSettings.ShadowMaps.Additional.Point.FovBias = 2.0f;
+                ShadowSettings.ShadowMaps.Additional.Point.FovBiasSet = true;
             }
 
             // ReSharper disable once ConditionIsAlwaysTrueOrFalse
