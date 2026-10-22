@@ -442,16 +442,20 @@ namespace DELTation.ToonRP.Shadows
             }
         }
 
+        // Clear moments must be finite: +-Infinity produces NaN variance when the Gaussian
+        // kernel mixes a clear texel with a caster texel. The packed clear depth is far
+        // beyond Unity's maximum light range (1024 * DepthScale = 10240 world units).
+        // The second moment is clamped to the largest finite half-float value; the shader
+        // clamps the resulting negative variance to zero.
+        private const float VsmClearDepth = 1024.0f;
+        private const float VsmClearDepthSquared = 65504.0f;
+
         private static Color GetShadowmapClearColor()
         {
-            var color = new Color(Mathf.NegativeInfinity, Mathf.Infinity, 0.0f, 0.0f);
-
-            if (SystemInfo.usesReversedZBuffer)
-            {
-                color.r *= -1;
-            }
-
-            return color;
+            // Non-reversed packed view-space depth is negative (farther = more negative),
+            // so the finite "far" value is -VsmClearDepth there.
+            float depth = SystemInfo.usesReversedZBuffer ? VsmClearDepth : -VsmClearDepth;
+            return new Color(depth, VsmClearDepthSquared, 0.0f, 0.0f);
         }
 
         private void RenderDirectionalShadows(CommandBuffer cmd, int index, int split, int tileSize)
@@ -506,7 +510,7 @@ namespace DELTation.ToonRP.Shadows
             cmd.EndSample(RenderShadowsSample);
             _context.ExecuteCommandBufferAndClear(cmd);
 
-            ExecuteBlur(cmd);
+            ExecuteBlur(cmd, split);
         }
 
         private void RenderAdditionalShadows(CommandBuffer cmd, int depthBits, in ToonLightsData lightsData)
@@ -541,6 +545,12 @@ namespace DELTation.ToonRP.Shadows
                 ToonLightsData.AdditionalLight additionalLight = lightsData.AdditionalLights[additionalLightIndex];
                 VisibleLight visibleLight = _cullingResults.visibleLights[additionalLight.VisibleLightIndex];
                 if (visibleLight.light.shadows == LightShadows.None)
+                {
+                    continue;
+                }
+
+                // Baked lights have no realtime shadow data.
+                if (visibleLight.light.bakingOutput.lightmapBakeType == LightmapBakeType.Baked)
                 {
                     continue;
                 }
@@ -637,6 +647,18 @@ namespace DELTation.ToonRP.Shadows
                 Light light = visibleLight.light;
 
                 if (light.shadows == LightShadows.None)
+                {
+                    continue;
+                }
+
+                // Keep tile accounting identical to the marking loop above. A strength-0 light
+                // must not consume tiles that were never included in totalTilesCount.
+                if (light.bakingOutput.lightmapBakeType == LightmapBakeType.Baked)
+                {
+                    continue;
+                }
+
+                if (Mathf.Clamp01(light.shadowStrength) <= 0.0f)
                 {
                     continue;
                 }
@@ -748,8 +770,7 @@ namespace DELTation.ToonRP.Shadows
 
             if (useVsm)
             {
-                cmd.SetGlobalFloat(VsmBlurTileSplitId, split);
-                ExecuteAdditionalBlur(cmd);
+                ExecuteAdditionalBlur(cmd, split);
             }
 
             cmd.SetGlobalMatrixArray(AdditionalShadowsVpId, _additionalShadowMatricesVp);
@@ -757,15 +778,18 @@ namespace DELTation.ToonRP.Shadows
             cmd.EnableKeyword(ToonShadows.AdditionalShadowsGlobalKeyword);
         }
 
-        private void ExecuteBlur(CommandBuffer cmd) =>
+        private void ExecuteBlur(CommandBuffer cmd, int split) =>
             ExecuteBlur(cmd, DirectionalShadowsAtlasId, DirectionalShadowsAtlasTempId, DirectionalShadowsAtlasDepthId,
-                0
+                0, split
             );
 
-        private void ExecuteAdditionalBlur(CommandBuffer cmd) =>
-            ExecuteBlur(cmd, AdditionalShadowsAtlasId, AdditionalShadowsAtlasTempId, AdditionalShadowsDepthId, 3);
+        private void ExecuteAdditionalBlur(CommandBuffer cmd, int split) =>
+            ExecuteBlur(cmd, AdditionalShadowsAtlasId, AdditionalShadowsAtlasTempId, AdditionalShadowsDepthId, 3,
+                split
+            );
 
-        private void ExecuteBlur(CommandBuffer cmd, int atlasId, int tempAtlasId, int depthId, int passOffset)
+        private void ExecuteBlur(CommandBuffer cmd, int atlasId, int tempAtlasId, int depthId, int passOffset,
+            int split)
         {
             if (_shadowMapsSettings.Blur != BlurMode.None)
             {
@@ -773,6 +797,7 @@ namespace DELTation.ToonRP.Shadows
 
                 float blurScatter = Mathf.Max(1.0f, _settings.ShadowMaps.BlurScatter);
                 cmd.SetGlobalFloat(BlurScatterId, blurScatter);
+                cmd.SetGlobalFloat(VsmBlurTileSplitId, split);
 
                 int gaussianHorizontalPass = passOffset;
                 int gaussianVerticalPass = passOffset + 1;
@@ -853,7 +878,7 @@ namespace DELTation.ToonRP.Shadows
             }
 
             SetTileViewport(cmd, tileIndex, split, tileSize, out _);
-            cmd.ClearRenderTarget(clearColor, true, GetShadowmapClearColor());
+            cmd.ClearRenderTarget(true, clearColor, GetShadowmapClearColor());
         }
 
         private static void SetTileViewport(CommandBuffer cmd, int index, int split, int tileSize, out Vector2 offset)

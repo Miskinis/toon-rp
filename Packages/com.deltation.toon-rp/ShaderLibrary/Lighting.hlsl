@@ -30,6 +30,7 @@ struct Light
     float3 direction;
     float shadowAttenuation;
     float distanceAttenuation;
+    float shadowStrength;
 };
 
 Light GetMainLight()
@@ -39,6 +40,7 @@ Light GetMainLight()
     light.direction = _DirectionalLightDirection;
     light.shadowAttenuation = 1.0f;
     light.distanceAttenuation = 1.0f;
+    light.shadowStrength = 1.0f;
     return light;
 }
 
@@ -55,6 +57,7 @@ Light GetMainLight(const float3 shadowCoords, const float3 positionWs)
     #endif // _TOON_RP_SHADOW_MAPS
     
     light.distanceAttenuation = 1.0f;
+    light.shadowStrength = 1.0f;
     return light;
 }
 
@@ -204,6 +207,7 @@ Light ConvertEntryToLight(const LightEntry lightEntry, const float3 positionWs)
     Light light;
 
     light.color = lightEntry.color;
+    light.shadowStrength = 1.0f;
     const float3 offset = lightEntry.positionWs - positionWs;
     light.direction = normalize(offset);
 
@@ -228,8 +232,9 @@ Light ConvertEntryToLight(const LightEntry lightEntry, const float3 positionWs)
             light.shadowAttenuation, 1.0f, ComputeShadowDistanceFade(positionWs)
         );
 
-        // Per-light Shadow Strength: 0 = no shadow, 1 = full shadow.
-        light.shadowAttenuation = lerp(1.0f, light.shadowAttenuation, lightEntry.shadowStrength);
+        // Per-light Shadow Strength is applied after the toon ramp/pattern, so partial
+        // strengths scale the final shadow instead of moving the attenuation across the ramp.
+        light.shadowStrength = lightEntry.shadowStrength;
     }
     else
 #endif // _TOON_RP_ADDITIONAL_SHADOWS

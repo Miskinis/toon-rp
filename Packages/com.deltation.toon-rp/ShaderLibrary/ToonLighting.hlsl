@@ -118,7 +118,10 @@ float GetDirectionalShadowAttenuation(const LightComputationParameters parameter
 float GetAdditionalShadowAttenuation(const LightComputationParameters parameters, const Light light)
 {
     #if defined(_TOON_RP_ADDITIONAL_SHADOWS)
-    return ApplyShadowRampAndPattern(parameters, light.shadowAttenuation);
+    const float shadow = ApplyShadowRampAndPattern(parameters, light.shadowAttenuation);
+    // Apply partial strength after the ramp so 0.5 produces a half-strength shadow
+    // instead of moving the raw attenuation across the toon threshold.
+    return lerp(1.0f, shadow, light.shadowStrength);
     #else // !_TOON_RP_ADDITIONAL_SHADOWS
     return 1.0f;
     #endif  // _TOON_RP_ADDITIONAL_SHADOWS

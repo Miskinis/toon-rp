@@ -138,13 +138,13 @@ namespace DELTation.ToonRP.Shadows
 
                 [ToonRpShowIf(nameof(Enabled))]
                 [Range(0.0f, 10.0f)]
-                [Tooltip("Extra field of view added to every cubemap face. Low-height, long-range point lights may need a larger bias.")]
+                [Tooltip("Extra FOV above 90 degrees added to every cubemap face. Low-height, long-range point lights may need a larger bias. 0 removes the overlap between faces.")]
                 public float FovBias;
 
                 // Serialization migration marker: assets created before FovBias existed read 0.
                 [HideInInspector] public bool FovBiasSet;
 
-                public float GetFovBias() => FovBiasSet ? FovBias : 2.0f;
+                public float GetFovBias() => FovBiasSet ? Mathf.Clamp(FovBias, 0.0f, 10.0f) : 2.0f;
             }
 
             public PointShadows Point;
