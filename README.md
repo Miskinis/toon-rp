@@ -9,7 +9,7 @@ Point lights can cast real-time shadows into the same additional-light shadow at
 1. In the pipeline asset, enable `Shadows/Shadow Maps/Additional`.
 2. Enable `Point`.
 3. On each point light, set `Shadow Type` to `Hard Shadows` or `Soft Shadows` and keep `Shadow Strength` above `0`.
-4. Make sure the light is `Realtime`. Baked and mixed lights do not cast real-time shadows.
+4. Make sure the light is `Realtime`. Baked lights do not cast real-time shadows; mixed lights cast only when Unity supplies real-time shadow data for them.
 
 ### How it works
 
@@ -17,15 +17,16 @@ A point light is rendered into six atlas tiles, one per cubemap face (`+X`, `-X`
 
 Spot and point lights can be mixed freely. Each light keeps its own atlas tile range.
 
-Point and spot shadow attenuation is passed through the same toon shadow ramp and pattern as the directional shadows. Assign `ShadowSettings/Pattern` (for example `Assets/Main/ShadowPattern.png`) to turn the hard cast shadow into the project's stylized mask; the pattern is sampled in world space and controlled by `PatternScale`. `ShadowSettings/Pattern Strength` multiplies the sampled mask (default `3`, which keeps the stylized point/spot look).
+Point and spot shadow attenuation is passed through the same toon shadow ramp and pattern as the directional shadows. Assign `ShadowSettings/Pattern` (for example `Assets/Main/ShadowPattern.png`) to turn the hard cast shadow into the project's stylized mask; the pattern is sampled in world space and controlled by `PatternScale`. `ShadowSettings/Pattern Strength` multiplies the sampled mask (default `3`, which keeps the stylized point/spot look). Partial `Shadow Strength` is applied after the ramp, so `0.5` produces a half-strength shadow rather than pushing the raw attenuation across the toon threshold.
 
 ### Quality settings
 
 Point shadows share the additional-light atlas and use the same VSM path as directional shadows: a two-channel moments atlas, a Gaussian blur, and the same light-bleeding reduction and precision compensation.
 
 - Set `Additional/Atlas Size` to `2048` or `4096`. A point light consumes six tiles, so the per-face resolution is `atlasSize / ceil(sqrt(totalTiles))`.
-- Sampling and blurring are clamped to each atlas tile (with a half-texel inset), so bilinear taps never bleed into a neighbouring cubemap face.
-- `Additional/Point/Fov Bias` (default `2`) is passed to `ComputePointShadowMatricesAndCullingPrimitives`. Low-height, long-range point lights may need a larger bias to keep casters inside every face.
+- Sampling and blurring are clamped to each atlas tile (with a half-texel inset), so bilinear taps never bleed into a neighbouring cubemap face. This covers the Gaussian and Box passes for both the directional cascade atlas and the additional atlas.
+- Early-bail blur returns the true center texel, not the first offset tap.
+- `Additional/Point/Fov Bias` (default `2`) is the extra field of view above 90 degrees passed to `ComputePointShadowMatricesAndCullingPrimitives`. Low-height, long-range point lights may need a larger bias to keep casters inside every face. `0` removes the overlap between faces and can expose seams.
 - `Blur` (`Box`, `Gaussian Low Quality`, `Gaussian High Quality`), `Blur Scatter`, `Blur Early Bail`, `Light Bleeding Reduction`, `VSM Precision`, and `Precision Compensation` apply to both shadow atlases.
 - `Soft Shadows/Spread` only affects the non-VSM PCF path. With VSM, shadow softness comes from `Blur Scatter`.
 - Use the light's `Shadow Normal Bias` first, then `Shadow Bias`, to control acne.

@@ -79,11 +79,16 @@ float2 Blur(TEXTURE2D_PARAM(tex, texSampler), const float2 texelSize, const floa
 {
     float2 value = 0;
 
-    const float2 centerSample = SAMPLE_TEXTURE2D(tex, texSampler,
-                                                 ClampBlurUv(uv + direction * BlurOffsets[0] * texelSize,
-                                                     uv, texelSize
-                                                 )).rg;
-    value += centerSample * BlurWeights[0];
+    const float2 firstTapSample = SAMPLE_TEXTURE2D(tex, texSampler,
+                                                   ClampBlurUv(uv + direction * BlurOffsets[0] * texelSize,
+                                                       uv, texelSize
+                                                   )).rg;
+    value += firstTapSample * BlurWeights[0];
+
+    #ifdef _TOON_RP_VSM_BLUR_EARLY_BAIL
+    // The early-bail path returns the true center texel, not the first offset tap.
+    const float2 centerSample = SAMPLE_TEXTURE2D(tex, texSampler, ClampBlurUv(uv, uv, texelSize)).rg;
+    #endif // _TOON_RP_VSM_BLUR_EARLY_BAIL
 
     UNITY_UNROLL
     for (uint i = 1; i < BlurKernelSize; ++i)
@@ -95,7 +100,7 @@ float2 Blur(TEXTURE2D_PARAM(tex, texSampler), const float2 texelSize, const floa
         UNITY_BRANCH
         if (i == 1)
         {
-            if (ApproximatelyEqual(sample, centerSample))
+            if (ApproximatelyEqual(sample, firstTapSample))
             {
                 return centerSample;
             }

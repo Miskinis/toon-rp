@@ -66,6 +66,7 @@ namespace DELTation.ToonRP.Shadows
         public void Dispose()
         {
             _blobShadows?.Dispose();
+            _shadowMaps?.Dispose();
         }
 
         public void Setup(in ScriptableRenderContext context, in CullingResults cullingResults,

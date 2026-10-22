@@ -151,7 +151,10 @@ float SampleShadowAttenuation(const float3 shadowCoords, const float3 positionWs
     const float2 varianceSample = SAMPLE_TEXTURE2D(_ToonRP_DirectionalShadowAtlas,
                                                    sampler_ToonRP_DirectionalShadowAtlas,
                                                    shadowCoords.xy).rg;
-    const float variance = varianceSample.y - varianceSample.x * varianceSample.x + _ToonRP_ShadowPrecisionCompensation;
+    const float variance = max(
+        varianceSample.y - varianceSample.x * varianceSample.x + _ToonRP_ShadowPrecisionCompensation,
+        0.0f
+    );
 
     #ifdef UNITY_REVERSED_Z
     const float difference = shadowCoords.z - varianceSample.x;
@@ -193,8 +196,10 @@ float SampleAdditionalShadowAttenuation(const float3 shadowCoords, const uint sh
     const float2 varianceSample = SAMPLE_TEXTURE2D(
         _ToonRP_AdditionalShadows, sampler_ToonRP_AdditionalShadows, shadowUv
     ).rg;
-    const float variance = varianceSample.y - varianceSample.x * varianceSample.x +
-        _ToonRP_ShadowPrecisionCompensation;
+    const float variance = max(
+        varianceSample.y - varianceSample.x * varianceSample.x + _ToonRP_ShadowPrecisionCompensation,
+        0.0f
+    );
 
     #ifdef UNITY_REVERSED_Z
     const float difference = shadowCoords.z - varianceSample.x;
@@ -306,36 +311,127 @@ float3 TransformWorldToAdditionalShadowCoords(const float3 positionWs, uint shad
 }
 
 // Matches Unity's CubemapFace order: +X, -X, +Y, -Y, +Z, -Z.
-int ComputePointShadowFace(const float3 lightToPosition)
+int PointShadowFaceFromAxis(const int axis, const float3 direction)
+{
+    if (axis == 0)
+    {
+        return direction.x >= 0.0f ? 0 : 1;
+    }
+
+    if (axis == 1)
+    {
+        return direction.y >= 0.0f ? 2 : 3;
+    }
+
+    return direction.z >= 0.0f ? 4 : 5;
+}
+
+// Returns the dominant face plus the second face and a blend weight in a narrow band around
+// the face boundary. The 2-degree FOV bias gives each face a small overlap, so both
+// projections are valid inside the band.
+void ComputePointShadowFacePair(const float3 lightToPosition, out int face0, out int face1, out float blend)
 {
     const float3 absDirection = abs(lightToPosition);
+    int axis0;
+    int axis1;
+    float value0;
+    float value1;
 
     if (absDirection.x >= absDirection.y && absDirection.x >= absDirection.z)
     {
-        return lightToPosition.x >= 0.0f ? 0 : 1;
+        axis0 = 0;
+        value0 = absDirection.x;
+        if (absDirection.y >= absDirection.z)
+        {
+            axis1 = 1;
+            value1 = absDirection.y;
+        }
+        else
+        {
+            axis1 = 2;
+            value1 = absDirection.z;
+        }
     }
-
-    if (absDirection.y >= absDirection.z)
+    else if (absDirection.y >= absDirection.z)
     {
-        return lightToPosition.y >= 0.0f ? 2 : 3;
+        axis0 = 1;
+        value0 = absDirection.y;
+        if (absDirection.x >= absDirection.z)
+        {
+            axis1 = 0;
+            value1 = absDirection.x;
+        }
+        else
+        {
+            axis1 = 2;
+            value1 = absDirection.z;
+        }
+    }
+    else
+    {
+        axis0 = 2;
+        value0 = absDirection.z;
+        if (absDirection.x >= absDirection.y)
+        {
+            axis1 = 0;
+            value1 = absDirection.x;
+        }
+        else
+        {
+            axis1 = 1;
+            value1 = absDirection.y;
+        }
     }
 
-    return lightToPosition.z >= 0.0f ? 4 : 5;
+    face0 = PointShadowFaceFromAxis(axis0, lightToPosition);
+    face1 = PointShadowFaceFromAxis(axis1, lightToPosition);
+
+    // edge = 0 at the boundary, 1 when the dominant axis is well ahead of the second.
+    const float edge = (value0 - value1) / max(value0, 1e-5f);
+    const float blendBand = 0.02f;
+    blend = 0.5f * saturate(1.0f - edge / blendBand);
+}
+
+float SamplePointShadowFace(const float3 positionWs, const int baseTile, const int faceIndex)
+{
+    const uint shadowIndex = (uint) (baseTile + faceIndex);
+    const float3 shadowCoords = TransformWorldToAdditionalShadowCoords(positionWs, shadowIndex);
+    return SampleAdditionalShadowAttenuationFiltered(shadowCoords, shadowIndex);
 }
 
 float SamplePointShadowAttenuation(const float3 positionWs, const float3 lightPositionWs, const int baseTile,
                                    const int faceMask)
 {
-    const int face = ComputePointShadowFace(positionWs - lightPositionWs);
-    if ((faceMask & (1 << face)) == 0)
+    int face0;
+    int face1;
+    float blend;
+    ComputePointShadowFacePair(positionWs - lightPositionWs, face0, face1, blend);
+
+    bool valid0 = (faceMask & (1 << face0)) != 0;
+    const bool valid1 = (faceMask & (1 << face1)) != 0;
+
+    if (!valid0 && !valid1)
     {
-        // The face failed to render this frame (or was never rendered), so do not sample its stale tile.
+        // Both faces failed to render this frame (or were never rendered).
         return 1.0f;
     }
 
-    const uint shadowIndex = (uint) (baseTile + face);
-    const float3 shadowCoords = TransformWorldToAdditionalShadowCoords(positionWs, shadowIndex);
-    return SampleAdditionalShadowAttenuationFiltered(shadowCoords, shadowIndex);
+    if (!valid0)
+    {
+        face0 = face1;
+        blend = 0.0f;
+        valid0 = true;
+    }
+
+    float attenuation = SamplePointShadowFace(positionWs, baseTile, face0);
+
+    if (valid1 && blend > 0.0f)
+    {
+        const float secondFaceAttenuation = SamplePointShadowFace(positionWs, baseTile, face1);
+        attenuation = lerp(attenuation, secondFaceAttenuation, blend);
+    }
+
+    return attenuation;
 }
 
 float ComputeShadowRamp(const float shadowAttenuation)
