@@ -36,6 +36,7 @@ void GetMainLightShadowAttenuation_float(
     LightComputationParameters parameters = (LightComputationParameters) 0;
     parameters.positionWs = positionWs;
     shadowAttenuation = ApplyShadowRampAndPattern(parameters, light.shadowAttenuation * occlusion);
+    shadowAttenuation = lerp(1.0f, shadowAttenuation, light.shadowStrength);
 
     #else // !_TOON_RP_ANY_SHADOWS
 

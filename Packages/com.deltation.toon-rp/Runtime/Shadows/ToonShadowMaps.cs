@@ -131,6 +131,8 @@ namespace DELTation.ToonRP.Shadows
         private ToonShadowSettings _settings;
         private int _shadowedDirectionalLightCount;
         private ToonShadowMapsSettings _shadowMapsSettings;
+        private bool _warnedAboutShadowSlotLimit;
+        private bool _warnedAboutInvalidAdditionalAtlasSize;
 
         static ToonShadowMaps()
         {
@@ -180,8 +182,10 @@ namespace DELTation.ToonRP.Shadows
 
         public void ReserveDirectionalShadows(Light light, int visibleLightIndex)
         {
+            float shadowStrength = Mathf.Clamp01(light.shadowStrength);
+
             if (_shadowedDirectionalLightCount < MaxShadowedDirectionalLightsCount &&
-                light.shadows != LightShadows.None && light.shadowStrength > 0f &&
+                light.shadows != LightShadows.None && shadowStrength > 0f &&
                 _cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds _)
                )
             {
@@ -533,15 +537,12 @@ namespace DELTation.ToonRP.Shadows
 
             int shadowedSpotLightsCount = 0;
             int shadowedPointLightsCount = 0;
+            int skippedShadowCasters = 0;
 
-            // Mark shadowed lights
+            // Mark shadowed lights. Eligibility is evaluated before the metadata-slot check so
+            // that lights skipped by the 16-slot limit can be reported.
             for (int additionalLightIndex = 0; additionalLightIndex < lightsData.AdditionalLights.Count; additionalLightIndex++)
             {
-                if (additionalLightIndex >= _additionalShadowMetadata.Length)
-                {
-                    continue;
-                }
-
                 ToonLightsData.AdditionalLight additionalLight = lightsData.AdditionalLights[additionalLightIndex];
                 VisibleLight visibleLight = _cullingResults.visibleLights[additionalLight.VisibleLightIndex];
                 if (visibleLight.light.shadows == LightShadows.None)
@@ -567,19 +568,46 @@ namespace DELTation.ToonRP.Shadows
                     continue;
                 }
 
+                bool isPoint = visibleLight.lightType == LightType.Point;
                 switch (visibleLight.lightType)
                 {
                     case LightType.Spot:
-                        ++shadowedSpotLightsCount;
                         break;
                     case LightType.Point:
-                        if (_settings.ShadowMaps.Additional.Point.Enabled)
+                        if (!_settings.ShadowMaps.Additional.Point.Enabled)
                         {
-                            ++shadowedPointLightsCount;
+                            continue;
                         }
 
                         break;
+                    default:
+                        continue;
                 }
+
+                if (additionalLightIndex >= _additionalShadowMetadata.Length)
+                {
+                    ++skippedShadowCasters;
+                    continue;
+                }
+
+                if (isPoint)
+                {
+                    ++shadowedPointLightsCount;
+                }
+                else
+                {
+                    ++shadowedSpotLightsCount;
+                }
+            }
+
+            if (skippedShadowCasters > 0 && !_warnedAboutShadowSlotLimit)
+            {
+                _warnedAboutShadowSlotLimit = true;
+                Debug.LogWarning(
+                    $"Additional shadows: {skippedShadowCasters} shadow-casting light(s) were skipped " +
+                    $"because the metadata supports {MaxShadowedAdditionalLightsCount} additional lights. " +
+                    "Reduce realtime shadowed lights or split the scene."
+                );
             }
 
             int totalTilesCount = shadowedSpotLightsCount + shadowedPointLightsCount * MaxPointShadowFaces;
@@ -590,8 +618,22 @@ namespace DELTation.ToonRP.Shadows
             }
 
             int resolution = (int)_settings.ShadowMaps.Additional.AtlasSize;
+            if (resolution <= 0)
+            {
+                WarnAboutInvalidAdditionalAtlasSize();
+                cmd.DisableKeyword(ToonShadows.AdditionalShadowsGlobalKeyword);
+                return;
+            }
+
             int split = Mathf.CeilToInt(Mathf.Sqrt(totalTilesCount));
             int tileSize = resolution / split;
+            if (tileSize <= 0)
+            {
+                WarnAboutInvalidAdditionalAtlasSize();
+                cmd.DisableKeyword(ToonShadows.AdditionalShadowsGlobalKeyword);
+                return;
+            }
+
             resolution = tileSize * split;
 
             // Used by the shader to clamp sampling and filtering to the current tile.
@@ -776,6 +818,19 @@ namespace DELTation.ToonRP.Shadows
             cmd.SetGlobalMatrixArray(AdditionalShadowsVpId, _additionalShadowMatricesVp);
             cmd.SetGlobalVectorArray(AdditionalShadowsMetadataId, _additionalShadowMetadata);
             cmd.EnableKeyword(ToonShadows.AdditionalShadowsGlobalKeyword);
+        }
+
+        private void WarnAboutInvalidAdditionalAtlasSize()
+        {
+            if (_warnedAboutInvalidAdditionalAtlasSize)
+            {
+                return;
+            }
+
+            _warnedAboutInvalidAdditionalAtlasSize = true;
+            Debug.LogWarning(
+                "Additional shadows: Atlas Size is zero or too small for the tile split; disabling additional shadows."
+            );
         }
 
         private void ExecuteBlur(CommandBuffer cmd, int split) =>

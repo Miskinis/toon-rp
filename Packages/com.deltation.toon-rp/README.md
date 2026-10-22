@@ -2,6 +2,15 @@
 
 For relevant documentation, please visit [the repository](https://github.com/Delt06/toon-rp).
 
+Host-project references (Ancient Privateers):
+
+- [Toon RP Shadows — Usage Matrix](../specs/toon-rp-shadow-usage/core/usage.md)
+- [Upstream issue mapping](../specs/archive/point-light-shadows/upstream-issues.md)
+
+## Directional Shadow Strength
+
+The main directional light's `Shadow Strength` now scales the toon-ramped directional shadow. `0` removes the shadow, `1` is the previous full-strength look, and `0.5` produces a half-strength ramped mask. The strength is applied after the toon shadow ramp/pattern and before SSAO; the baked-GI subtraction applies the same value once. The blob-shadow and ShaderGraph main-light occlusion paths use the same value.
+
 ## Point Light Shadows
 
 Point lights can cast real-time shadows into the same additional-light shadow atlas used by spot lights. The feature is opt-in:
