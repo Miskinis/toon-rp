@@ -131,7 +131,7 @@ namespace DELTation.ToonRP.Extensions.BuiltIn
                     {
                         fixed (Vector4* destination = _batchLightsData)
                         {
-                            Vector4* source = allLightsData.GetUnsafePtr() + startIndex;
+                            Vector4* source = (Vector4*) allLightsData.GetUnsafePtr() + startIndex;
                             UnsafeUtility.MemCpy(destination, source, count * UnsafeUtility.SizeOf<Vector4>());
                         }
                     }
