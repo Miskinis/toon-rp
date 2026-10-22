@@ -92,6 +92,10 @@ namespace DELTation.ToonRP.Lighting
                 Vector4 direction = (visibleLight.localToWorldMatrix * Vector3.back).normalized;
                 _cmd.SetGlobalVector(ShaderPropertyId.DirectionalLightDirectionId, direction);
 
+                _cmd.SetGlobalFloat(ShaderPropertyId.DirectionalLightShadowStrengthId,
+                    Mathf.Clamp01(visibleLight.light.shadowStrength)
+                );
+
                 InitializeLightCommon(visibleLight, shadowSettings);
                 LightBakingOutput lightBakingOutput = visibleLight.light.bakingOutput;
 
@@ -109,6 +113,7 @@ namespace DELTation.ToonRP.Lighting
                 _cmd.SetGlobalVector(ShaderPropertyId.DirectionalLightColorId, Vector4.zero);
                 _cmd.SetGlobalVector(ShaderPropertyId.DirectionalLightDirectionId, Vector4.zero);
                 _cmd.SetGlobalVector(ShaderPropertyId.DirectionalLightOcclusionProbesId, Vector4.zero);
+                _cmd.SetGlobalFloat(ShaderPropertyId.DirectionalLightShadowStrengthId, 1.0f);
             }
         }
 
@@ -263,7 +268,7 @@ namespace DELTation.ToonRP.Lighting
             }
 
             var positionWsAttenuation = new Vector4(positionWs.x, positionWs.y, positionWs.z, distanceAttenuation);
-            half2 spotAttenuationHalf = math.half2((half) spotAttenuation.x, (half) spotAttenuation.y);
+            half2 spotAttenuationHalf = math.half2((half)spotAttenuation.x, (half)spotAttenuation.y);
             float spotAttenuationPacked = math.asfloat(spotAttenuationHalf.x.value << 16 | spotAttenuationHalf.y.value);
             var spotDirAttenuationPacked = new Vector4(spotDir.x, spotDir.y, spotDir.z, spotAttenuationPacked);
 
@@ -378,6 +383,9 @@ namespace DELTation.ToonRP.Lighting
 
             public static readonly int DirectionalLightOcclusionProbesId =
                 Shader.PropertyToID("_DirectionalLightOcclusionProbes");
+
+            public static readonly int DirectionalLightShadowStrengthId =
+                Shader.PropertyToID("_ToonRP_DirectionalShadowStrength");
 
             public static readonly int AdditionalLightCount = Shader.PropertyToID("_AdditionalLightCount");
             public static readonly int AdditionalLightColors = Shader.PropertyToID("_AdditionalLightColors");

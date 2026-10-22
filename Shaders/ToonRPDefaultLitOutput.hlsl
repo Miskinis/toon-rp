@@ -37,8 +37,10 @@ float3 ComputeLitOutputColor(const v2f IN, const float4 albedo)
     lightComputationParameters.overrideRampRim = ConstructOverrideRampRim();
     
     // ReSharper disable once CppEntityAssignedButNoRead
-    float shadowAttenuation, mainLightDiffuseRamp;
-    const float3 lights = ComputeLights(lightComputationParameters, shadowAttenuation, mainLightDiffuseRamp);
+    float shadowAttenuation, mainLightDiffuseRamp, mainLightShadowAttenuation;
+    const float3 lights = ComputeLights(lightComputationParameters, shadowAttenuation, mainLightDiffuseRamp,
+        mainLightShadowAttenuation
+    );
     
     #ifdef _RIM
     const float fresnel = 1 - saturate(dot(viewDirectionWs, normalWs));
@@ -52,7 +54,7 @@ float3 ComputeLitOutputColor(const v2f IN, const float4 albedo)
     const float3 ambient = 0;
     #else // !_FORCE_DISABLE_ENVIRONMENT_LIGHT
     float3 bakedGi = ComputeBakedGi(lightComputationParameters.lightmapUv, normalWs);
-    MixRealtimeAndBakedGi(bakedGi, mainLightDiffuseRamp, shadowAttenuation);
+    MixRealtimeAndBakedGi(bakedGi, mainLightDiffuseRamp, mainLightShadowAttenuation);
     const float3 ambient = bakedGi * albedo.rgb;
     #endif // _FORCE_DISABLE_ENVIRONMENT_LIGHT
 

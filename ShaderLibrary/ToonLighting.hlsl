@@ -150,18 +150,25 @@ Light GetMainLight(const LightComputationParameters parameters)
 }
 
 float3 ComputeMainLightComponent(const in LightComputationParameters parameters, const float ssao,
-                                 out float outShadowAttenuation, out float outDiffuseRamp)
+                                 out float outShadowAttenuation, out float outDiffuseRamp,
+                                 out float outMainLightShadowAttenuation)
 {
     const float3 mixedShadowColor = MixShadowColor(parameters.albedo.rgb, parameters.shadowColor);
     const Light light = GetMainLight(parameters);
     const float nDotL = dot(parameters.normalWs, light.direction);
     outDiffuseRamp = ComputeRampDiffuse(parameters, nDotL);
     #if _RECEIVE_SHADOWS_OFF
-    outShadowAttenuation = 1.0f;
+    const float styledShadow = 1.0f;
     #else // !_RECEIVE_SHADOWS_OFF
-    outShadowAttenuation = GetDirectionalShadowAttenuation(parameters, light);
+    const float styledShadow = GetDirectionalShadowAttenuation(parameters, light);
     #endif // _RECEIVE_SHADOWS_OFF
-    outShadowAttenuation *= ssao;
+
+    // The baked-GI subtraction receives the unscaled styled shadow. GetMainLightShadowStrength
+    // applies the strength once inside SubtractDirectMainLightFromLightmap.
+    outMainLightShadowAttenuation = styledShadow * ssao;
+
+    // Scale after the toon ramp and before SSAO, matching the additional-light path.
+    outShadowAttenuation = lerp(1.0f, styledShadow, light.shadowStrength) * ssao;
 
     const float finalDiffuseRamp = min(outDiffuseRamp * outShadowAttenuation, outShadowAttenuation);
     const float3 diffuse = ApplyRamp(parameters.albedo.rgb, mixedShadowColor, finalDiffuseRamp);
@@ -238,10 +245,13 @@ float3 ComputeAdditionalLightComponentPerVertex(const in LightComputationParamet
     return rawDiffuse * parameters.albedo.rgb;
 }
 
-float3 ComputeLights(const in LightComputationParameters parameters, out float outShadowAttenuation, out float outMainLightDiffuseRamp)
+float3 ComputeLights(const in LightComputationParameters parameters, out float outShadowAttenuation,
+                     out float outMainLightDiffuseRamp, out float outMainLightShadowAttenuation)
 {
     const float ssao = GetSsao(parameters);
-    float3 lights = ComputeMainLightComponent(parameters, ssao, outShadowAttenuation, outMainLightDiffuseRamp);
+    float3 lights = ComputeMainLightComponent(parameters, ssao, outShadowAttenuation,
+        outMainLightDiffuseRamp, outMainLightShadowAttenuation
+    );
 
     #if defined(TOON_RP_ADDITIONAL_LIGHTS_ANY_PER_PIXEL)
     lights += ComputeAdditionalLightComponent(parameters, ssao);

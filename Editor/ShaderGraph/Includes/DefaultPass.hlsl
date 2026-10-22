@@ -80,8 +80,10 @@ float4 PS(PackedVaryings packedInput) : SV_TARGET
     #endif // _TOON_RP_ADDITIONAL_LIGHTS_VERTEX
     
     // ReSharper disable once CppEntityAssignedButNoRead
-    float shadowAttenuation, mainLightDiffuseRamp;
-    const float3 lights = ComputeLights(lightComputationParameters, shadowAttenuation, mainLightDiffuseRamp);
+    float shadowAttenuation, mainLightDiffuseRamp, mainLightShadowAttenuation;
+    const float3 lights = ComputeLights(lightComputationParameters, shadowAttenuation, mainLightDiffuseRamp,
+        mainLightShadowAttenuation
+    );
 
     #if _RIM
     const float fresnel = 1 - saturate(dot(viewDirectionWs, normalWs));
@@ -95,7 +97,7 @@ float4 PS(PackedVaryings packedInput) : SV_TARGET
     const float3 ambient = 0;
     #else // !_FORCE_DISABLE_ENVIRONMENT_LIGHT
     float3 bakedGi = ComputeBakedGi(lightComputationParameters.lightmapUv, normalWs);
-    MixRealtimeAndBakedGi(bakedGi, mainLightDiffuseRamp, shadowAttenuation);
+    MixRealtimeAndBakedGi(bakedGi, mainLightDiffuseRamp, mainLightShadowAttenuation);
     const float3 ambient = bakedGi * albedo.rgb;
     #endif // _FORCE_DISABLE_ENVIRONMENT_LIGHT
 

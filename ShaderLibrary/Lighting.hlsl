@@ -16,6 +16,8 @@ CBUFFER_START(_ToonRPLight)
     float3 _DirectionalLightDirection;
     half4 _DirectionalLightOcclusionProbes;
 
+    float _ToonRP_DirectionalShadowStrength;
+
     uint _AdditionalLightCount;
     float4 _AdditionalLightPositions[MAX_ADDITIONAL_LIGHT_COUNT]; // xyz = position, w = spotAttenuation.x
     half4 _AdditionalLightColors[MAX_ADDITIONAL_LIGHT_COUNT]; // xyz = color, w = 1/range^2
@@ -40,7 +42,7 @@ Light GetMainLight()
     light.direction = _DirectionalLightDirection;
     light.shadowAttenuation = 1.0f;
     light.distanceAttenuation = 1.0f;
-    light.shadowStrength = 1.0f;
+    light.shadowStrength = _ToonRP_DirectionalShadowStrength;
     return light;
 }
 
@@ -57,14 +59,13 @@ Light GetMainLight(const float3 shadowCoords, const float3 positionWs)
     #endif // _TOON_RP_SHADOW_MAPS
     
     light.distanceAttenuation = 1.0f;
-    light.shadowStrength = 1.0f;
+    light.shadowStrength = _ToonRP_DirectionalShadowStrength;
     return light;
 }
 
 half GetMainLightShadowStrength()
 {
-    // TODO: https://github.com/Delt06/toon-rp/issues/230
-    return 1.h;
+    return (half) _ToonRP_DirectionalShadowStrength;
 }
 
 uint GetPerObjectAdditionalLightCount()
