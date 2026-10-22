@@ -80,8 +80,9 @@ float2 Blur(TEXTURE2D_PARAM(tex, texSampler), const float2 texelSize, const floa
     float2 value = 0;
 
     const float2 centerSample = SAMPLE_TEXTURE2D(tex, texSampler,
-                                                 ClampBlurUv(uv, uv, texelSize)
-                                                 + direction * BlurOffsets[0] * texelSize).rg;
+                                                 ClampBlurUv(uv + direction * BlurOffsets[0] * texelSize,
+                                                     uv, texelSize
+                                                 )).rg;
     value += centerSample * BlurWeights[0];
 
     UNITY_UNROLL

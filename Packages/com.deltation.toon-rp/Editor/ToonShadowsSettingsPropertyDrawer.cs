@@ -61,6 +61,9 @@ namespace DELTation.ToonRP.Editor
                 enabledContainer.Add(
                     new PropertyField(property.FindPropertyRelative(nameof(ToonShadowSettings.PatternScale)))
                 );
+                enabledContainer.Add(
+                    new PropertyField(property.FindPropertyRelative(nameof(ToonShadowSettings.PatternStrength)))
+                );
             }
 
             {

@@ -86,6 +86,9 @@ namespace DELTation.ToonRP.Shadows
         private static readonly int AdditionalShadowFilterScaleId =
             Shader.PropertyToID("_ToonRP_AdditionalShadowFilterScale");
 
+        private static readonly int AdditionalShadowsSplitId =
+            Shader.PropertyToID("_ToonRP_AdditionalShadows_Split");
+
         private static readonly int VsmBlurTileSplitId = Shader.PropertyToID("_ToonRP_VSM_BlurTileSplit");
 
         private static readonly int ZClipId = Shader.PropertyToID("_ZClip");
@@ -542,6 +545,13 @@ namespace DELTation.ToonRP.Shadows
                     continue;
                 }
 
+                // Shadow strength 0 means "no shadow"; otherwise it scales the attenuation in the shader.
+                float shadowStrength = Mathf.Clamp01(visibleLight.light.shadowStrength);
+                if (shadowStrength <= 0.0f)
+                {
+                    continue;
+                }
+
                 if (!_cullingResults.GetShadowCasterBounds(additionalLight.VisibleLightIndex, out Bounds _))
                 {
                     continue;
@@ -573,6 +583,9 @@ namespace DELTation.ToonRP.Shadows
             int split = Mathf.CeilToInt(Mathf.Sqrt(totalTilesCount));
             int tileSize = resolution / split;
             resolution = tileSize * split;
+
+            // Used by the shader to clamp sampling and filtering to the current tile.
+            cmd.SetGlobalFloat(AdditionalShadowsSplitId, split);
 
             cmd.SetGlobalFloat(ZClipId, 1);
             cmd.SetKeyword(ToonShadows.VsmGlobalKeyword, useVsm);
@@ -652,7 +665,8 @@ namespace DELTation.ToonRP.Shadows
                             BakeViewSpaceZIntoMatrix(ref _additionalShadowMatricesVp[tileIndex], in viewMatrix);
                         }
 
-                        _additionalShadowMetadata[additionalLightIndex] = new Vector4(tileIndex, 1, 0, 0);
+                        _additionalShadowMetadata[additionalLightIndex] =
+                            new Vector4(tileIndex, 1, Mathf.Clamp01(light.shadowStrength), 0);
 
                         cmd.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
                         BindLightParams(cmd, light, light.shadowBias, -light.shadowNormalBias, 0.0f);
@@ -679,19 +693,23 @@ namespace DELTation.ToonRP.Shadows
                         }
 
                         int baseTile = tileIndex;
-                        bool renderedAnyFace = false;
+                        int faceMask = 0;
+                        float fovBias = _settings.ShadowMaps.Additional.Point.GetFovBias();
 
                         for (int face = 0; face < MaxPointShadowFaces; face++)
                         {
+                            int shadowTile = baseTile + face;
                             if (!_cullingResults.ComputePointShadowMatricesAndCullingPrimitives(visibleLightIndex,
-                                    (CubemapFace) face, 2.0f, out Matrix4x4 viewMatrix,
+                                    (CubemapFace) face, fovBias, out Matrix4x4 viewMatrix,
                                     out Matrix4x4 projectionMatrix, out ShadowSplitData splitData
                                 ))
                             {
+                                // Do not leave last frame's shadow in the tile: clear it and invalidate its matrix.
+                                InvalidateAdditionalShadowTile(cmd, shadowTile, split, tileSize, useVsm);
+                                _additionalShadowMatricesVp[shadowTile] = Matrix4x4.zero;
                                 continue;
                             }
 
-                            int shadowTile = baseTile + face;
                             SetTileViewport(cmd, shadowTile, split, tileSize, out Vector2 offset);
                             _additionalShadowMatricesVp[shadowTile] =
                                 ConvertToAtlasMatrix(projectionMatrix * viewMatrix, offset, split);
@@ -713,11 +731,13 @@ namespace DELTation.ToonRP.Shadows
                             };
                             _context.DrawShadows(ref shadowSettings);
 
-                            renderedAnyFace = true;
+                            faceMask |= 1 << face;
                         }
 
-                        _additionalShadowMetadata[additionalLightIndex] = renderedAnyFace
-                            ? new Vector4(baseTile, MaxPointShadowFaces, 0, 0)
+                        _additionalShadowMetadata[additionalLightIndex] = faceMask != 0
+                            ? new Vector4(baseTile, MaxPointShadowFaces, Mathf.Clamp01(light.shadowStrength),
+                                faceMask
+                            )
                             : defaultMetadata;
 
                         tileIndex = baseTile + MaxPointShadowFaces;
@@ -822,6 +842,18 @@ namespace DELTation.ToonRP.Shadows
             }
 
             _context.ExecuteCommandBufferAndClear(cmd);
+        }
+
+        private static void InvalidateAdditionalShadowTile(CommandBuffer cmd, int tileIndex, int split, int tileSize,
+            bool clearColor)
+        {
+            if (tileIndex < 0 || tileIndex >= MaxAdditionalShadowTiles)
+            {
+                return;
+            }
+
+            SetTileViewport(cmd, tileIndex, split, tileSize, out _);
+            cmd.ClearRenderTarget(clearColor, true, GetShadowmapClearColor());
         }
 
         private static void SetTileViewport(CommandBuffer cmd, int index, int split, int tileSize, out Vector2 offset)

@@ -29,6 +29,8 @@ namespace DELTation.ToonRP.Shadows
             Shader.PropertyToID("_ToonRP_ShadowPattern");
         private static readonly int ShadowPatternScaleId =
             Shader.PropertyToID("_ToonRP_ShadowPatternScale");
+        private static readonly int ShadowPatternStrengthId =
+            Shader.PropertyToID("_ToonRP_ShadowPatternStrength");
         private ToonBlobShadows _blobShadows;
         private ScriptableRenderContext _context;
         private ToonShadowSettings _settings;
@@ -118,6 +120,7 @@ namespace DELTation.ToonRP.Shadows
                     cmd.SetKeyword(ShadowsPattern, patternEnabled);
                     cmd.SetGlobalTexture(ShadowPatternId, patternEnabled ? _settings.Pattern : Texture2D.blackTexture);
                     cmd.SetGlobalVector(ShadowPatternScaleId, _settings.PatternScale);
+                    cmd.SetGlobalFloat(ShadowPatternStrengthId, _settings.GetPatternStrength());
                 }
             }
 

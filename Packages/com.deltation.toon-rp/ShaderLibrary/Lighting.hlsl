@@ -86,6 +86,8 @@ struct LightEntry
     half2 spotAttenuation;
     int shadowIndex;
     int shadowFaceCount;
+    int shadowFaceMask;
+    float shadowStrength;
 };
 
 int GetLightShadowIndex(const uint globalLightIndex)
@@ -113,6 +115,30 @@ int GetLightShadowFaceCount(const uint globalLightIndex)
     return faceCount;
 }
 
+int GetLightShadowFaceMask(const uint globalLightIndex)
+{
+    int faceMask = 0;
+
+    if (globalLightIndex < MAX_ADDITIONAL_LIGHT_SHADOWS_COUNT)
+    {
+        faceMask = (int) _ToonRP_AdditionalShadows_Metadata[globalLightIndex].w;
+    }
+
+    return faceMask;
+}
+
+float GetLightShadowStrength(const uint globalLightIndex)
+{
+    float shadowStrength = 1.0f;
+
+    if (globalLightIndex < MAX_ADDITIONAL_LIGHT_SHADOWS_COUNT)
+    {
+        shadowStrength = _ToonRP_AdditionalShadows_Metadata[globalLightIndex].z;
+    }
+
+    return shadowStrength;
+}
+
 LightEntry GetUniformLightEntry(const uint globalLightIndex)
 {
     LightEntry lightEntry;
@@ -137,6 +163,8 @@ LightEntry GetUniformLightEntry(const uint globalLightIndex)
 
     lightEntry.shadowIndex = GetLightShadowIndex(globalLightIndex);
     lightEntry.shadowFaceCount = GetLightShadowFaceCount(globalLightIndex);
+    lightEntry.shadowFaceMask = GetLightShadowFaceMask(globalLightIndex);
+    lightEntry.shadowStrength = GetLightShadowStrength(globalLightIndex);
     
     return lightEntry;
 }
@@ -186,7 +214,7 @@ Light ConvertEntryToLight(const LightEntry lightEntry, const float3 positionWs)
         if (lightEntry.shadowFaceCount > 1)
         {
             light.shadowAttenuation = SamplePointShadowAttenuation(
-                positionWs, lightEntry.positionWs, lightEntry.shadowIndex
+                positionWs, lightEntry.positionWs, lightEntry.shadowIndex, lightEntry.shadowFaceMask
             );
         }
         else
@@ -199,6 +227,9 @@ Light ConvertEntryToLight(const LightEntry lightEntry, const float3 positionWs)
         light.shadowAttenuation = lerp(
             light.shadowAttenuation, 1.0f, ComputeShadowDistanceFade(positionWs)
         );
+
+        // Per-light Shadow Strength: 0 = no shadow, 1 = full shadow.
+        light.shadowAttenuation = lerp(1.0f, light.shadowAttenuation, lightEntry.shadowStrength);
     }
     else
 #endif // _TOON_RP_ADDITIONAL_SHADOWS

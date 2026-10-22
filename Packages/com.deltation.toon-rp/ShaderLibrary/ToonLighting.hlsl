@@ -93,7 +93,9 @@ float ApplyShadowRampAndPattern(const LightComputationParameters parameters, flo
     shadowAttenuation = ComputeShadowRamp(shadowAttenuation);
 
     #ifdef _TOON_RP_SHADOWS_PATTERN
-    const float pattern = SampleShadowPattern(parameters.positionWs);
+    const float pattern = saturate(
+        SampleShadowPattern(parameters.positionWs) * _ToonRP_ShadowPatternStrength
+    );
     shadowAttenuation = lerp(shadowAttenuation, 1, pattern);
     #endif // _TOON_RP_SHADOWS_PATTERN
 

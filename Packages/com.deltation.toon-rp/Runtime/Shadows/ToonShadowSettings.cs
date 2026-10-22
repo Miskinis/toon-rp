@@ -30,7 +30,17 @@ namespace DELTation.ToonRP.Shadows
         public Texture2D Pattern;
         public Vector3 PatternScale;
 
+        [Min(0f)]
+        [Tooltip("Multiplier applied to the shadow pattern mask. 3 keeps the stylized point/spot shadow look.")]
+        public float PatternStrength;
+
+        // Serialization migration marker: assets created before PatternStrength existed read 0.
+        // In that case GetPatternStrength falls back to 3 instead of disabling the pattern.
+        [HideInInspector] public bool PatternStrengthSet;
+
         [FormerlySerializedAs("Vsm")] public ToonShadowMapsSettings ShadowMaps;
         public ToonBlobShadowsSettings Blobs;
+
+        public float GetPatternStrength() => PatternStrengthSet ? PatternStrength : 3.0f;
     }
 }
